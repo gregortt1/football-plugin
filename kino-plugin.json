@@ -1,7 +1,7 @@
 {
   "id": "football-plugin",
   "name": "Fútbol en vivo",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "apiVersion": 15,
   "entry": "plugin.js",
   "icon": "icon.png",
@@ -30,7 +30,7 @@
       "type": "url"
     }
   ],
-  "description": "Partidos y canales en la pestaña En vivo: horarios y equipos confirmados con ESPN, escudos de los clubes, solo lo que está al aire, los próximos con su hora, y los canales deportivos (ESPN y Fox Sports separados por país: Argentina y México; DSports, TNT Sports, TyC Sports, Win Sports, DAZN, TUDN) para cuando no hay partidos. Sin fútbol femenino.",
+  "description": "Partidos y canales en la pestaña En vivo: horarios y equipos confirmados con ESPN, escudos de los clubes, solo lo que está al aire, los próximos con su hora, y los canales deportivos (ESPN y Fox Sports separados por país: Argentina y México; DSports, TNT Sports, TyC Sports, Win Sports, DAZN, TUDN) para cuando no hay partidos, más canales latinos que la agenda no trae (Tigo Sports Paraguay y Honduras, FTV Bolivia, Deportes TVC, ITV Deportes, Teletrak, Real Madrid TV). Sin fútbol femenino.",
   "author": "gregortt1",
   "homepage": "https://github.com/gregortt1/football-plugin"
 }

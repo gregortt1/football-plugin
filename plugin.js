@@ -731,6 +731,33 @@ function matchChannel(event, categoryId, now) {
   };
 }
 
+// Channels the stream site does not carry, from the public iptv-org lists: Latin sports
+// channels that answer today. They come with their stream already known, so Kino plays them
+// without asking the site for a source.
+const EXTRA_STREAMS = [
+  { name: "Tigo Sports (Paraguay)", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Tigo_Sports_2025.png/960px-Tigo_Sports_2025.png", url: "http://45.134.141.161:2200/ARG/Tigo_Sports/tracks-v1a1/mono.m3u8" },
+  { name: "Tigo Sports (Honduras)", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Tigo_Sports_2025.png/960px-Tigo_Sports_2025.png", url: "http://168.196.127.137:6001/play/a0ay/index.m3u8" },
+  { name: "FTV (Bolivia)", logo: "https://i.imgur.com/YOr1Oac.png", url: "https://master.tucableip.com/ftvhd/index.m3u8" },
+  { name: "Deportes TVC (Honduras)", logo: "https://i.ibb.co/kszxTgHm/B74-D2-F54-1693-4-DB5-AB5-F-80-AA15987-B7-A.png", url: "http://162.19.255.233:8080/play/UNbAl57p9hXZClOu56FCTYXmD-MOS3u5IUkeXPpBt80/m3u8" },
+  { name: "CDN Deportes (Rep. Dominicana)", logo: "https://i.imgur.com/yU5LqTL.png", url: "https://hls.tvabierta.net/hls/036.m3u8" },
+  { name: "ITV Deportes (México)", logo: "https://iili.io/J1kV1Bn.png", url: "https://thm-it-roku.otteravision.com/thm/it/it.m3u8" },
+  { name: "Teletrak (Chile)", logo: "https://i.imgur.com/NoJvlig.png", url: "https://unlimited6-cl.dps.live/sportinghd/sportinghd.smil/playlist.m3u8" },
+  { name: "Turf Móvil (Chile)", logo: "https://i.imgur.com/TwIe4lK.png", url: "https://tvturf4.janus.cl/playlist/stream.m3u8?d=w&id=" },
+  { name: "AS3 Sport TV (Venezuela)", logo: "https://i.ibb.co/bRmGbsyV/A3-SPORTTV.jpg", url: "https://streamtv.as3sport.online:3394/hybrid/play.m3u8" },
+  { name: "FIFA+ (Latinoamérica)", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/FIFA%2B_(2025).svg/960px-FIFA%2B_(2025).svg.png", url: "https://6c849fb3.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/TEctbXhfRklGQVBsdXNTcGFuaXNoLTFfSExT/playlist.m3u8" },
+  { name: "Real Madrid TV", logo: "https://i.imgur.com/5pMo7dL.png", url: "https://rmtv.akamaized.net/hls/live/2043153/rmtv-es-web/master.m3u8" },
+  { name: "beIN SPORTS XTRA en Español", logo: "https://i.imgur.com/V562tpO.png", url: "https://dc1644a9jazgj.cloudfront.net/beIN_Sports_Xtra_Espanol.m3u8" },
+];
+
+function extraStation(extra, index) {
+  return {
+    id: "x-" + index,
+    title: extra.name,
+    ref: "",
+    logo: extra.logo,
+    stream: extra.url,
+  };
+}
 // One list of stations: the site's own directory, with the six channels that exist in both
 // an Argentine and a Mexican feed replaced by those two, each named with its country.
 async function stationList() {
@@ -766,6 +793,10 @@ async function stationList() {
     }
   }
 
+  for (let e = 0; e < EXTRA_STREAMS.length; e++) {
+    out.push(extraStation(EXTRA_STREAMS[e], e));
+  }
+
   // the same name twice is the same channel twice: keep the first
   const seen = Object.create(null);
   const unique = [];
@@ -779,14 +810,16 @@ async function stationList() {
 }
 
 function sportsChannel(station, index, categoryId) {
-  return {
+  const item = {
     id: station.id,
     title: String(station.title || station.id).slice(0, 300),
     categoryId: categoryId,
-    ref: station.ref,
     logo: station.logo || DEFAULT_LOGO,
     number: (index % 9999) + 1,
   };
+  if (station.stream) item.stream = { url: station.stream, mime: "application/x-mpegURL" };
+  else item.ref = station.ref;
+  return item;
 }
 
 function pageOf(list, cursor, size) {

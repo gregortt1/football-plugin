@@ -43,6 +43,16 @@ reserva quedan afuera, y también las entradas duplicadas o con un rival que no 
 Cada partido lleva el escudo del club local y cada canal lleva su logo. La búsqueda de En vivo
 encuentra equipos y canales por nombre, y la guía de TV muestra a qué hora empieza cada partido.
 
+## Canales que la agenda no trae
+
+Además del directorio del sitio, el plugin suma canales deportivos latinos que salen de las
+listas públicas de [iptv-org](https://iptv-org.github.io/iptv/): Tigo Sports de Paraguay y de
+Honduras, FTV de Bolivia, Deportes TVC, CDN Deportes, ITV Deportes, Teletrak, Turf Móvil, AS3
+Sport TV, FIFA+, Real Madrid TV y beIN SPORTS XTRA en español. Esos vienen con su señal ya
+conocida, así que Kino los abre sin pasar por el sitio.
+
+Son señales de terceros: algunas están geobloqueadas fuera de su país y otras se caen sin aviso.
+Antes de agregar una se comprobó que estuviera emitiendo, pero eso no lo garantiza para mañana.
 ## Los dos escudos
 
 En la grilla de En vivo, Kino acepta una sola imagen por canal, así que por defecto el partido
