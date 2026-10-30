@@ -1,7 +1,7 @@
 {
   "id": "football-plugin",
-  "name": "Fútbol Internacional",
-  "version": "0.2.0",
+  "name": "Fútbol en vivo",
+  "version": "0.3.0",
   "apiVersion": 15,
   "entry": "plugin.js",
   "icon": "icon.png",
@@ -11,13 +11,15 @@
     "pelotalibre.biz",
     "tvf90.com",
     "streamxhd.st",
+    "la18hd.su",
     "ftlly.com",
     "*.ftlly.com",
     "futlivehd.com",
     "*.futlivehd.com"
   ],
-  "capabilities": ["search", "home", "browse", "resolve"],
-  "description": "Partidos de fútbol en vivo: Champions, Europa League, La Liga, Premier League, Serie A, Bundesliga, Ligue 1 y ligas de Sudamérica.",
+  "capabilities": ["home", "resolve", "channels"],
+  "liveStreamHosts": "any",
+  "description": "Partidos de fútbol y canales deportivos en la pestaña En vivo: Champions, Europa League, La Liga, Premier League, Serie A, Bundesliga, Ligue 1 y ligas de Sudamérica.",
   "author": "gregortt1",
   "homepage": "https://github.com/gregortt1/football-plugin"
 }
