@@ -1,376 +1,593 @@
-/**
- * Fútbol Internacional plugin for Kino
- * @version 0.1.0
- * @apiVersion 6
- * Kino 0.9.50+
- */
+// Kino plugin — Fútbol Internacional
+// Data: pelotalibre.biz (agenda + relay API). Stream relays: tvf90.com, streamxhd.st.
+// Target: Kino QuickJS sandbox (no fetch/Buffer/require; kino.fetch only).
 
-// Base hosts that we'll declare and use with kino.fetch
-// These are the primary hosts for football streaming sources
-const BASE_HOSTS = [
-  "pelotalibre.biz",
-  "streamxhd.st",
-  "tvf90.com"
+const SITE = "https://pelotalibre.biz";
+const AGENDA_URL = SITE + "/agenda";
+const MATCH_URL = SITE + "/match/";
+const PLAYBACK_URL = SITE + "/api/direct-playback.php";
+const TVF90 = "https://tvf90.com";
+
+const UA =
+  "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 " +
+  "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36";
+
+const CACHE_MS = 60000;
+const RESOLVE_CACHE_MS = 300000;
+const ROW_ITEMS = 30;
+const PAGE_ITEMS = 40;
+const MAX_SOURCES = 4;
+const LIVE_WINDOW_MS = 3 * 60 * 60 * 1000;
+
+// --- text helpers ---------------------------------------------------------
+
+function isEnglish() {
+  try {
+    return typeof kino.lang === "string" && /^en/i.test(kino.lang);
+  } catch (e) {
+    return false;
+  }
+}
+
+function t(es, en) {
+  return isEnglish() ? en : es;
+}
+
+function log() {
+  try {
+    kino.log.apply(null, arguments);
+  } catch (e) {
+    // a log line is not worth failing a row over
+  }
+}
+
+function decodeEntities(value) {
+  return String(value == null ? "" : value)
+    .replace(/\\(?=['"&])/g, "")
+    .replace(/&#0*39;/g, "'")
+    .replace(/&#0*34;/g, '"')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&");
+}
+
+function clean(value) {
+  return decodeEntities(value).replace(/\s+/g, " ").trim();
+}
+
+const DAYS_ES = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+const DAYS_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function whenText(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const days = isEnglish() ? DAYS_EN : DAYS_ES;
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return days[d.getDay()] + " " + hh + ":" + mm;
+}
+
+// --- which competitions this plugin shows --------------------------------
+
+const GROUPS = [
+  { key: "champions", es: "Champions League", en: "Champions League", re: /champions league/i },
+  { key: "europa", es: "Europa League", en: "Europa League", re: /europa league/i },
+  { key: "laliga", es: "La Liga", en: "La Liga", re: /^(laliga|la liga)$/i },
+  { key: "premier", es: "Premier League", en: "Premier League", re: /^premier league$/i },
+  { key: "seriea", es: "Serie A", en: "Serie A", re: /^serie a$/i },
+  { key: "bundesliga", es: "Bundesliga", en: "Bundesliga", re: /bundesliga/i },
+  { key: "ligue1", es: "Ligue 1", en: "Ligue 1", re: /^ligue 1$/i },
+  {
+    key: "sudamerica",
+    es: "Sudamérica",
+    en: "South America",
+    re: /libertadores|sudamericana|brasileir|liga profesional|^liga 1$|liga chile|liga paraguay|^primera a$|^primera divisi|liga mx|liga betplay|liga nacional|copa ecuador|expansi[oó]n mx/i,
+  },
 ];
 
-/**
- * search - Search for tournaments, leagues or teams
- * @param {string} query - The search query
- * @returns {Promise<Array>} List of search results
- */
-export async function search(query) {
-  "use strict";
-  if (!query || query.trim().length === 0) {
-    return kino.error("not_found", "Consulta vacía");
+const OTHER = { key: "otros", es: "Más fútbol", en: "More football" };
+
+// Anything that is not football (the agenda also carries padel, tennis, motor racing...).
+const NOT_FOOTBALL =
+  /^(sports|f1|nba|nfl|nhl|mlb|espn knockout|ufc|boxeo|boxing|tenis|atp|wta|p[aá]del|motogp|moto gp|f[oó]rmula|cricket|rugby|golf|ciclismo|atletismo|v[oó]lei|b[eé]isbol|b[eé]isbol)/i;
+
+function groupOf(competition) {
+  const name = String(competition || "");
+  for (let i = 0; i < GROUPS.length; i++) {
+    if (GROUPS[i].re.test(name)) return GROUPS[i].key;
+  }
+  if (NOT_FOOTBALL.test(name)) return null;
+  return OTHER.key;
+}
+
+function isFootball(competition) {
+  return groupOf(competition) !== null;
+}
+
+// --- agenda parsing -------------------------------------------------------
+
+function parseAgenda(html) {
+  const events = [];
+  const seen = Object.create(null);
+  const chunks = String(html || "").split("data-agenda-event");
+
+  for (let i = 1; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const slug = (/href="\/match\/([^"#?]+)#source=\d+"/.exec(chunk) || [])[1];
+    if (!slug || seen[slug]) continue;
+
+    const sources = [];
+    const srcRe = /href="\/match\/([^"#?]+)#source=(\d+)"[^>]*><span>([^<]*)<\/span>(?:<small>([^<]*)<\/small>)?/g;
+    let m;
+    while ((m = srcRe.exec(chunk))) {
+      if (m[1] !== slug) continue;
+      sources.push({ id: m[2], channel: clean(m[4] || m[3] || "") });
+    }
+    if (!sources.length) continue;
+
+    seen[slug] = true;
+    const competition = clean((/source-agenda-competition">([^<]*)</.exec(chunk) || [])[1]).replace(/:\s*$/, "");
+    let teams = clean((/<strong><span class="source-agenda-competition">[^<]*<\/span>\s*([^<]+)<\/strong>/.exec(chunk) || [])[1]);
+    if (!teams) continue;
+
+    // The source sometimes repeats the competition inside the match line.
+    if (competition) {
+      const prefix = competition.toLowerCase() + ":";
+      if (teams.toLowerCase().indexOf(prefix) === 0) teams = teams.slice(prefix.length).trim();
+    }
+    if (!isFootball(competition)) continue;
+    const group = groupOf(competition);
+
+    const start = (/data-source-instant="([^"]+)"/.exec(chunk) || [])[1] || "";
+    const at = start ? new Date(start).getTime() : 0;
+
+    // A match that ended hours ago is not a channel any more.
+    if (!isNaN(at) && at && at + LIVE_WINDOW_MS < Date.now()) continue;
+
+    events.push({
+      slug: slug,
+      competition: competition,
+      group: group,
+      teams: teams,
+      title: competition ? competition + ": " + teams : teams,
+      start: start,
+      at: isNaN(at) ? 0 : at,
+      sources: sources,
+    });
   }
 
+  events.sort(function (a, b) {
+    if (a.at !== b.at) return a.at - b.at;
+    return a.title < b.title ? -1 : a.title > b.title ? 1 : 0;
+  });
+  return events;
+}
+
+function isLive(event, now) {
+  if (!event.at) return false;
+  return now >= event.at && now < event.at + LIVE_WINDOW_MS;
+}
+
+function toItem(event, now) {
+  const live = isLive(event, now);
+  const when = whenText(event.start);
+  const count = event.sources.length;
+  const badges = [];
+  if (live) badges.push("EN VIVO");
+  else if (when) badges.push(when.slice(0, 20));
+
+  const parts = [];
+  if (when) parts.push(when);
+  parts.push(count === 1 ? t("1 fuente", "1 source") : count + t(" fuentes", " sources"));
+  if (event.sources[0] && event.sources[0].channel) parts.push(event.sources[0].channel);
+
+  return {
+    id: event.slug,
+    ref: event.slug,
+    title: event.title.slice(0, 200),
+    kind: "live",
+    overview: parts.join(" · ").slice(0, 400),
+    genres: ["deportes"],
+    badges: badges,
+  };
+}
+
+// --- the agenda, fetched once per minute ----------------------------------
+
+let agendaCache = { at: 0, html: "" };
+
+async function agendaHtml() {
+  const now = Date.now();
+  if (agendaCache.html && now - agendaCache.at < CACHE_MS) return agendaCache.html;
   try {
-    // Search for football tournaments and leagues
-    const results = [];
-
-    // Try to fetch from pelotalibre's search-like endpoint or similar
-    // Since the actual sites use complex obfuscation, we structure the search
-    // to look for known league names
-
-    const lowerQuery = query.toLowerCase().trim();
-
-    // Common international football tournaments
-    const tournaments = [
-      "champions league", "champions", "uefa champions",
-      "europa league", "uropa europa",
-      "premier league", "primera división",
-      "la liga", "liga española",
-      "serie a", "serie a italiana",
-      "bundesliga", "bundesliga alemana",
-      "ligue 1", "liga francesa",
-      "copa libertadores", "libertadores",
-      "sudamericana", "coppa italia",
-      "liga mx", "mexican league"
-    ];
-
-    for (const tournament of tournaments) {
-      if (lowerQuery.includes(tournament)) {
-        results.push({
-          id: tournament.replace(/\s+/g, "-"),
-          title: tournament,
-          year: new Date().getFullYear(),
-          type: "live",
-          genre: "deportes"
-        });
-        break; // Only add first match to avoid duplicates
-      }
+    const html = await getText(AGENDA_URL);
+    if (html && html.length > 1000) {
+      agendaCache = { at: now, html: html };
+      return html;
     }
+    throw new Error("empty agenda");
+  } catch (e) {
+    log("agenda failed", e && e.message);
+    if (agendaCache.html) return agendaCache.html;
+    throw e;
+  }
+}
 
-    // If no specific tournament matched, add a general football result
-    if (results.length === 0) {
-      results.push({
-        id: "futbol-general",
-        title: "Fútbol general - " + query,
-        year: new Date().getFullYear(),
-        type: "live",
-        genre: "deportes"
-      });
-    }
+// --- network helpers ------------------------------------------------------
 
-    return results;
-  } catch (err) {
-    console.error("search error:", err);
+async function getText(url) {
+  const res = await kino.fetch(url, {
+    headers: { "User-Agent": UA, Referer: SITE + "/" },
+  });
+  if (!res || !res.ok) throw new Error("HTTP " + (res ? res.status : "?"));
+  return await res.text();
+}
+
+async function getJson(url) {
+  const res = await kino.fetch(url, {
+    headers: { "User-Agent": UA, Accept: "application/json", Referer: SITE + "/" },
+  });
+  if (!res || !res.ok) throw new Error("HTTP " + (res ? res.status : "?"));
+  return await res.json();
+}
+
+// --- the five capabilities ------------------------------------------------
+
+export async function home() {
+  let events;
+  try {
+    events = parseAgenda(await agendaHtml());
+  } catch (e) {
     return [];
   }
+  if (!events.length) return [];
+
+  const now = Date.now();
+  const rows = [];
+
+  const live = events.filter(function (e) {
+    return isLive(e, now);
+  });
+  if (live.length) {
+    rows.push({
+      id: "now",
+      title: t("En vivo ahora", "Live now"),
+      genre: "deportes",
+      ref: "now",
+      items: live.slice(0, 20).map(function (e) {
+        return toItem(e, now);
+      }),
+    });
+  }
+
+  rows.push({
+    id: "all",
+    title: t("Todo el fútbol", "All football"),
+    genre: "deportes",
+    ref: "all",
+    items: events.slice(0, ROW_ITEMS).map(function (e) {
+      return toItem(e, now);
+    }),
+  });
+
+  for (let i = 0; i < GROUPS.length; i++) {
+    const group = GROUPS[i];
+    const items = events
+      .filter(function (e) {
+        return e.group === group.key;
+      })
+      .slice(0, ROW_ITEMS)
+      .map(function (e) {
+        return toItem(e, now);
+      });
+    if (!items.length) continue;
+    rows.push({
+      id: "g-" + group.key,
+      title: t(group.es, group.en),
+      genre: "deportes",
+      ref: "g-" + group.key,
+      items: items,
+    });
+  }
+
+  const more = events
+    .filter(function (e) {
+      return e.group === OTHER.key;
+    })
+    .slice(0, ROW_ITEMS)
+    .map(function (e) {
+      return toItem(e, now);
+    });
+  if (more.length) {
+    rows.push({
+      id: "g-otros",
+      title: t(OTHER.es, OTHER.en),
+      genre: "deportes",
+      ref: "g-otros",
+      items: more,
+    });
+  }
+
+  return rows.slice(0, 20);
 }
 
-/**
- * home - Get home rows with featured content
- * @returns {Promise<Object>} Home structure with rows
- */
-export async function home() {
-  "use strict";
+export async function search(query) {
+  let events;
   try {
-    const rows = [];
+    events = parseAgenda(await agendaHtml());
+  } catch (e) {
+    return { items: [] };
+  }
 
-    // Home row for featured international leagues
-    rows.push({
-      title: "Ligas Internacionales",
-      genre: "deportes",
-      items: [
-        { id: "premier-league", title: "Premier League" },
-        { id: "la-liga", title: "La Liga" },
-        { id: "serie-a", title: "Serie A" },
-        { id: "bundesliga", title: "Bundesliga" },
-        { id: "ligue-one", title: "Ligue 1" }
-      ]
+  const q = clean((query && query.q) || "").toLowerCase();
+  if (!q) return { items: [] };
+
+  const words = q.split(/\s+/).filter(function (w) {
+    return w.length > 1;
+  });
+  const needles = words.length ? words : [q];
+
+  const now = Date.now();
+  const items = events
+    .filter(function (e) {
+      const hay = (e.title + " " + e.competition).toLowerCase();
+      return needles.every(function (w) {
+        return hay.indexOf(w) !== -1;
+      });
+    })
+    .slice(0, 100)
+    .map(function (e) {
+      return toItem(e, now);
     });
 
-    // Home row for South American leagues
-    rows.push({
-      title: "Sudamérica",
-      genre: "deportes",
-      items: [
-        { id: "liga-mx", title: "Liga MX" },
-        { id: "copa-libertadores", title: "Copa Libertadores" },
-        { id: "coppa-sudamericana", title: "Copa Sudamericana" }
-      ]
-    );
+  return { items: items };
+}
 
-    // Home row for major tournaments
-    rows.push({
-      title: "Torneos Internacionales",
-      genre: "deportes",
-      items: [
-        { id: "champions-league", title: "Champions League" },
-        { id: "europa-league", title: "Europa League" }
-      ]
+export async function browse(ref, cursor) {
+  let events;
+  try {
+    events = parseAgenda(await agendaHtml());
+  } catch (e) {
+    throw kino.error("unavailable", "no se pudo leer la agenda");
+  }
+
+  const now = Date.now();
+  let list = null;
+  const key = String(ref || "");
+
+  if (key === "all") {
+    list = events;
+  } else if (key === "now") {
+    list = events.filter(function (e) {
+      return isLive(e, now);
     });
-
-    return { rows };
-  } catch (err) {
-    console.error("home error:", err);
-    return { rows: [] };
+  } else if (key.indexOf("g-") === 0) {
+    const wanted = key.slice(2);
+    list = events.filter(function (e) {
+      return e.group === wanted;
+    });
   }
+
+  if (!list) throw kino.error("not_found", "esa fila ya no existe");
+
+  const page = cursor ? Number(cursor) : 1;
+  if (!isFinite(page) || page < 1 || page > 100) {
+    throw kino.error("not_found", "página inválida");
+  }
+
+  const from = (page - 1) * PAGE_ITEMS;
+  const slice = list.slice(from, from + PAGE_ITEMS);
+  return {
+    items: slice.map(function (e) {
+      return toItem(e, now);
+    }),
+    next: from + PAGE_ITEMS < list.length ? String(page + 1) : undefined,
+  };
 }
 
-/**
- * browse - Browse a specific league/tournament
- * @param {string} ref - The row reference (id from home/search)
- * @returns {Promise<Object>} Browse results
- */
-export async function browse(ref) {
-  "use strict";
-  try {
-    // Map ref to league name
-    const leagueMap = {
-      "premier-league": "Premier League",
-      "la-liga": "La Liga",
-      "serie-a": "Serie A",
-      "bundesliga": "Bundesliga",
-      "ligue-one": "Ligue 1",
-      "liga-mx": "Liga MX",
-      "copa-libertadores": "Copa Libertadores",
-      "coppa-sudamericana": "Copa Sudamericana",
-      "champions-league": "Champions League",
-      "europa-league": "Europa League"
-    };
-
-    const leagueName = leagueMap[ref];
-    if (!leagueName) {
-      return kino.error("not_found", "Competición no encontrada");
-    }
-
-    // Use kino.fetch to try to get matches for this league
-    // We'll try pelotalibre or similar sites
-    let matches = [];
-
-    // Try fetching from a known source
-    try {
-      const fetchHosts = ["pelotalibre.biz"];
-      for (const host of fetchHosts) {
-        // Search for the league on the site
-        const response = await kino.fetch(`https://${host}/agenda`, {
-          method: "GET",
-          headers: { "User-Agent": "KinoPlugin/1.0" }
-        });
-
-        if (response && response.status === 200) {
-          const text = await response.text();
-          // Simple parsing - look for league references
-          const lowerText = text.toLowerCase();
-          if (lowerText.includes(leagueName.toLowerCase())) {
-            // Found references, create match entries
-            matches = createMockMatches(leagueName);
-            break;
-          }
-        }
-      }
-    } catch (fetchErr) {
-      console.error("browse fetch error:", fetchErr);
-    }
-
-    // If no matches found from fetch, return mock data
-    if (matches.length === 0) {
-      matches = createMockMatches(leagueName);
-    }
-
-    return {
-      id: ref,
-      title: leagueName,
-      kind: "live",
-      genre: "deportes",
-      episodes: matches
-    };
-  } catch (err) {
-    console.error("browse error:", err);
-    return kino.error("not_found", "Error al cargar la competición");
-  }
-}
-
-/**
- * episodes - List matches for a league/tournament
- * @param {string} ref - The league/tournament reference
- * @returns {Promise<Array>} List of match episodes
- */
-export async function episodes(ref) {
-  "use strict";
-  try {
-    // Map ref to league/tournament
-    const episodeMap = {
-      "premier-league": "Premier League",
-      "la-liga": "La Liga",
-      "serie-a": "Serie A",
-      "bundesliga": "Bundesliga",
-      "ligue-one": "Ligue 1",
-      "liga-mx": "Liga MX",
-      "copa-libertadores": "Copa Libertadores",
-      "coppa-sudamericana": "Copa Sudamericana",
-      "champions-league": "Champions League",
-      "europa-league": "Europa League"
-    };
-
-    const leagueName = episodeMap[ref];
-    if (!leagueName) {
-      return kino.error("not_found", "Competición no encontrada");
-    }
-
-    // Create matches for the league
-    const matches = createMatchesForLeague(leagueName);
-
-    return matches;
-  } catch (err) {
-    console.error("episodes error:", err);
-    return kino.error("not_found", "Error al obtener los partidos");
-  }
-}
-
-/**
- * resolve - Get playable stream URL for a match
- * @param {string} ref - The match reference
- * @returns {Promise<Object>} Stream URL or error
- *
- * Note: Since the external sites use heavily obfuscated JavaScript and
- * dynamically generated URLs that cannot be statically extracted in Kino's
- * QuickJS sandbox, resolve returns an error guiding the user. If you need
- * external resolution, declare the "externalResolve" capability at apiVersion 11
- * and install a separate resolver app.
- */
 export async function resolve(ref) {
-  "use strict";
-  try {
-    // The ref format is expected to be like: liga-premier vs equipo
-    // or torneo-torneo-name, normalized for lookup
-    const matchRef = ref.replace(/\s+/g, "-").toLowerCase();
+  await null; // the checks below may throw: never before the first await
+  const slug = String(ref || "").trim();
+  if (!slug) throw kino.error("not_found", "partido vacío");
 
-    // Try known sources via kino.fetch (hosts declared in kino-plugin.json)
-    const fetchHosts = ["pelotalibre.biz", "streamxhd.st", "tvf90.com"];
+  const cached = resolveCache[slug];
+  if (cached && Date.now() - cached.at < RESOLVE_CACHE_MS) return cached.stream;
 
-    for (const host of fetchHosts) {
-      try {
-        // Try to find a match/relevant page on the site
-        // Note: actual stream URLs are generated dynamically by the site's JS,
-        // so we cannot reliably extract progressive URLs or HLS manifests in
-        // QuickJS sandbox without Buffer/crypto/fetch full API.
-        const response = await kino.fetch(`https://${host}/match/${matchRef}`, {
-          method: "GET",
-          headers: { "User-Agent": "KinoPlugin/1.0" }
-        });
+  const page = await getText(MATCH_URL + encodeURIComponent(slug));
+  const sources = parseSources(page);
+  if (!sources.length) throw kino.error("not_found", "este partido no tiene fuentes");
 
-        if (response && response.status === 200) {
-          const text = await response.text();
-          // If by chance a direct media URL appears in the HTML, return it
-          const urlMatch = text.match(/https?:\/\/[^\s"'>)+]+(?:m3u8|mp4|ts)(?:\?[^\s"'>)*)/i);
-          if (urlMatch) {
-            return {
-              url: urlMatch[0],
-              mime: "video/mp4",
-              title: "Partido de " + matchRef
-            };
-          }
-        }
-      } catch (fetchErr) {
-        // Host not allowed or error - continue to next host
-        continue;
-      }
-    }
-
-    // If we reach here, no direct stream URL could be extracted from the
-    // external sites in the QuickJS sandbox. Provide a helpful user message.
-    return kino.error("not_found",
-      "No se encontró stream reproducible directamente. " +
-      "Para ver estos partidos, usa una app resolutora externa (apiVersion 11) " +
-      "o consulta la fuente original en tu dispositivo.",
-      { userMessage: "Stream no reproducible desde el plugin" }
+  const ordered = sources
+    .filter(function (s) {
+      return s.provider === "server-1";
+    })
+    .concat(
+      sources.filter(function (s) {
+        return s.provider === "server-2";
+      })
+    )
+    .concat(
+      sources.filter(function (s) {
+        return s.provider !== "server-1" && s.provider !== "server-2";
+      })
     );
 
-  } catch (err) {
-    console.error("resolve error:", err);
-    return kino.error("unavailable", "No disponible en este momento");
+  let attempts = 0;
+  for (let i = 0; i < ordered.length && attempts < MAX_SOURCES; i++) {
+    attempts++;
+    const source = ordered[i];
+    try {
+      const stream = await resolveSource(slug, source.id);
+      if (stream) {
+        resolveCache[slug] = { at: Date.now(), stream: stream };
+        return stream;
+      }
+    } catch (e) {
+      log("source failed", source.id, e && e.message);
+    }
+  }
+
+  throw kino.error("unavailable", "ninguna fuente respondió", {
+    userMessage: t(
+      "Ninguna fuente de este partido está respondiendo. Prueba otro partido o vuelve más tarde.",
+      "No source for this match is responding. Try another match or come back later."
+    ),
+  });
+}
+
+// --- source resolution ----------------------------------------------------
+
+const resolveCache = Object.create(null);
+
+function parseSources(html) {
+  const out = [];
+  const seen = Object.create(null);
+  const re = /data-source="(\d+)"([^>]*)>/g;
+  let m;
+  while ((m = re.exec(html))) {
+    const id = m[1];
+    if (seen[id]) continue;
+    seen[id] = true;
+    const attrs = m[2] || "";
+    const provider = (/data-provider="([^"]*)"/.exec(attrs) || [])[1] || "";
+    const title = clean((/title="([^"]*)"/.exec(attrs) || [])[1]).replace(/^Fuente \d+\s*·\s*/, "");
+    out.push({ id: id, provider: provider, label: title });
+  }
+  return out;
+}
+
+async function resolveSource(slug, sourceId) {
+  const url =
+    PLAYBACK_URL +
+    "?type=event&slug=" +
+    encodeURIComponent(slug) +
+    "&source=" +
+    encodeURIComponent(sourceId) +
+    "&automatic=1";
+
+  const answer = await getJson(url);
+  if (!answer || !answer.url) return null;
+
+  const relay = String(answer.url);
+  let host = "";
+  try {
+    host = new URL(relay).host.toLowerCase();
+  } catch (e) {
+    return null;
+  }
+
+  let playable = null;
+  if (host === "tvf90.com" || /\.tvf90\.com$/.test(host)) playable = await fromTvf90(relay);
+  else if (host === "streamxhd.st" || /\.streamxhd\.st$/.test(host)) playable = await fromStreamxhd(relay);
+  if (!playable) return null;
+
+  const streamUrl = normalise(playable);
+  if (!(await alive(streamUrl))) return null;
+  return { url: streamUrl, mime: "application/x-mpegURL" };
+}
+
+// A relay happily hands out a playlist for a channel that is off: read it before promising it.
+async function alive(url) {
+  try {
+    const res = await kino.fetch(url, { headers: { "User-Agent": UA } });
+    if (!res || !res.ok) return false;
+    const head = (await res.text()).slice(0, 80);
+    return head.indexOf("#EXTM3U") === 0;
+  } catch (e) {
+    log("probe failed", e && e.message);
+    return false;
   }
 }
 
-/**
- * Create mock matches for a league (fallback when fetch fails)
- * @param {string} leagueName - Name of the league
- * @returns {Array} Match episodes
- */
-function createMockMatches(leagueName) {
-  const matches = [];
-
-  // Generate some sample matches based on the league
-  const today = new Date();
-  const day = String(today.getDate()).padStart(2, "0");
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const year = today.getFullYear();
-  const todayStr = `${day}/${month}/${year}`;
-
-  // Sample matches - in a real plugin these would come from API data
-  const sampleMatches = [
-    { home: "Team A", away: "Team B", status: "Programado", time: "20:00" },
-    { home: "Team C", away: "Team D", status: "Programado", time: "22:30" },
-    { home: "Team E", away: "Team F", status: "En vivo", time: "18:45" }
-  ];
-
-  for (const match of sampleMatches) {
-    matches.push({
-      id: `${leagueName}-${match.home}-${match.away}`.replace(/\s+/g, "-").toLowerCase(),
-      title: `${match.home} vs ${match.away}`,
-      season: year,
-      number: matches.length + 1,
-      kind: "live",
-      genre: "deportes",
-      index: 1,
-      // Provide a resolve ref that can be used
-      ref: `${leagueName.toLowerCase()}-${match.home.replace(/\s+/g, "-")}-${match.away.replace(/\s+/g, "-")}`
-    });
-  }
-
-  return matches;
+function normalise(url) {
+  return String(url)
+    .replace(/^https:\/\/([^\/:?#]+):443(\/|\?|$)/, "https://$1$2")
+    .replace(/&amp;/g, "&")
+    .trim();
 }
 
-/**
- * Create matches data for a league
- * @param {string} leagueName - Name of the league
- * @returns {Array} Match data
- */
-function createMatchesForLeague(leagueName) {
-  const matches = [];
+function playbackFrom(html) {
+  const m = /playbackURL\s*=\s*["']([^"']+)["']/.exec(html);
+  return m && m[1] ? normalise(decodeEntities(m[1])) : null;
+}
 
-  // Generate sample matches - in a real implementation these would come from a real API
-  const sampleMatches = [
-    { home: "Fútbol Club Barcelona", away: "Real Madrid CF", competition: leagueName, date: "2026-11-20" },
-    { home: "Manchester United", away: "Liverpool FC", competition: leagueName, date: "2026-11-23" },
-    { home: "Juventus", away: "AC Milan", competition: leagueName, date: "2026-11-24" }
-  ];
+function absolute(url, base) {
+  const value = String(url || "").trim();
+  if (!value) return null;
+  if (value.indexOf("//") === 0) return "https:" + value;
+  if (/^https?:\/\//i.test(value)) return value;
+  if (value.charAt(0) === "/") return base + value;
+  return base + "/" + value;
+}
 
-  for (const match of sampleMatches) {
-    matches.push({
-      id: match.home.replace(/\s+/g, "-").toLowerCase() + "-" + match.away.replace(/\s+/g, "-").toLowerCase(),
-      title: `${match.home} vs ${match.away}`,
-      season: 2026,
-      number: matches.length + 1,
-      kind: "live",
-      genre: "deportes",
-      competition: leagueName,
-      ref: `${leagueName.toLowerCase()}-${match.home.replace(/\s+/g, "-")}-${match.away.replace(/\s+/g, "-")}`
-    });
+async function fromTvf90(wrapperUrl) {
+  const wrapper = await getText(wrapperUrl);
+  const direct = playbackFrom(wrapper);
+  if (direct) return direct;
+
+  const src = (/<iframe[^>]+src="([^"]+)"/.exec(wrapper) || [])[1];
+  if (!src) return null;
+
+  const inner = absolute(decodeEntities(src), TVF90);
+  if (!inner) return null;
+
+  const page = await getText(inner);
+  return playbackFrom(page);
+}
+
+// The streamxhd player ships its URL as base64 fragments: [[index, "b64"], ...],
+// sorted by index, each decoded to a number minus a key and turned into one character.
+function decodeStreamxhd(html) {
+  const head = /var\s+playbackURL\s*=\s*""\s*,\s*([A-Za-z_$][\w$]*)\s*=\s*\[\]/.exec(html);
+  if (!head) return null;
+  const name = head[1].replace(/\$/g, "\\$");
+
+  const assign = new RegExp(name + "\\s*=\\s*(\\[[\\s\\S]*?\\])\\s*;").exec(html);
+  if (!assign) return null;
+
+  const pairs = [];
+  const pairRe = /\[(\d+)\s*,\s*"([^"]*)"\]/g;
+  let m;
+  while ((m = pairRe.exec(assign[1]))) pairs.push([Number(m[1]), m[2]]);
+  if (!pairs.length) return null;
+
+  const keyExp = /var\s+k\s*=\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*\+\s*([A-Za-z_$][\w$]*)\s*\(\s*\)/.exec(html);
+  if (!keyExp) return null;
+
+  const first = functionValue(html, keyExp[1]);
+  const second = functionValue(html, keyExp[2]);
+  if (first === null || second === null) return null;
+  const key = first + second;
+
+  pairs.sort(function (a, b) {
+    return a[0] - b[0];
+  });
+
+  let out = "";
+  for (let i = 0; i < pairs.length; i++) {
+    let digits;
+    try {
+      digits = atob(pairs[i][1]).replace(/\D/g, "");
+    } catch (e) {
+      return null;
+    }
+    if (!digits) return null;
+    out += String.fromCharCode(parseInt(digits, 10) - key);
   }
+  return out.indexOf("http") === 0 ? out : null;
+}
 
-  return matches;
+function functionValue(html, name) {
+  const escaped = name.replace(/\$/g, "\\$");
+  const re = new RegExp("function\\s+" + escaped + "\\s*\\(\\s*\\)\\s*\\{\\s*return\\s+(\\d+)\\s*;?\\s*\\}");
+  const m = re.exec(html);
+  return m ? Number(m[1]) : null;
+}
+
+async function fromStreamxhd(pageUrl) {
+  const page = await getText(pageUrl);
+  return decodeStreamxhd(page);
 }
