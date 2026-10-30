@@ -1,0 +1,16 @@
+{
+  "id": "football-plugin",
+  "name": "Fútbol Internacional",
+  "version": "0.1.0",
+  "apiVersion": 15,
+  "entry": "plugin.js",
+  "icon": "icon.png",
+  "hosts": [
+    "pelotalibre.biz",
+    "streamxhd.st",
+    "tvf90.com"
+  ],
+  "capabilities": ["search", "home", "browse", "episodes", "resolve"],
+  "description": "Ligas de fútbol internacionales",
+  "genre": "deportes"
+}
