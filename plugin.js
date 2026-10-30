@@ -1,6 +1,6 @@
-// Kino plugin — Fútbol en vivo (canales)
-// Data: pelotalibre.biz (agenda, canales + relay API). Stream relays: tvf90.com, streamxhd.st, la18hd.su.
-// Target: Kino QuickJS sandbox (no fetch/Buffer/require; kino.fetch only).
+// Kino plugin — Fútbol en vivo: partidos y canales deportivos dentro de "En vivo".
+// Data: pelotalibre.biz (agenda, canales + relay API). Streams: tvf90.com, streamxhd.st, la18hd.su.
+// Target: Kino QuickJS sandbox (no fetch/Buffer/require; kino.fetch only), apiVersion 15.
 
 const SITE = "https://pelotalibre.biz";
 const AGENDA_URL = SITE + "/agenda";
@@ -18,13 +18,15 @@ const CHANNELS_CACHE_MS = 300000;
 const STREAM_CACHE_MS = 120000;
 const MATCH_PAGE = 300;
 const CHANNEL_PAGE = 300;
-const MAX_SOURCES = 3;
+const MAX_SOURCES = 4;
 const MAX_SERVERS = 2;
 
-// A football match can run past two hours with half time and stoppage time.
+// A football match runs up to two hours with half time and stoppage time.
 const MATCH_WINDOW_MS = 165 * 60 * 1000;
 // Listed as live this many minutes before kick-off (pre-match studio).
 const EARLY_MS = 10 * 60 * 1000;
+// The agenda carries today and tomorrow; anything beyond three days is not ours.
+const AHEAD_MS = 72 * 60 * 60 * 1000;
 
 // --- text helpers ---------------------------------------------------------
 
@@ -73,35 +75,140 @@ function clockText(ms) {
   return hh + ":" + mm;
 }
 
-// --- which competitions this plugin shows --------------------------------
-
-// Anything that is not football (the agenda also carries padel, tennis, motor racing...).
-const NOT_FOOTBALL =
-  /^(sports|f1|nba|nfl|nhl|mlb|espn knockout|ufc|boxeo|boxing|tenis|atp|wta|p[aá]del|motogp|moto gp|f[oó]rmula|cricket|rugby|golf|ciclismo|atletismo|v[oó]lei|b[eé]isbol)/i;
-
-// Women's football is left out on request: competitions, team lines and tags.
-const WOMEN = /femenil|femenina|femenino|women'?s|\bwsl\b|damer|feminin/i;
-
-function isFootball(competition) {
-  return !NOT_FOOTBALL.test(String(competition || ""));
+// lowercase, no accents, no punctuation: the only shape names are compared in
+function plain(value) {
+  let text = clean(value).toLowerCase();
+  try {
+    text = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  } catch (e) {
+    // a runtime without normalize still compares the ASCII part
+  }
+  return text.replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function isWomen(competition, teams) {
-  return WOMEN.test(String(competition || "")) || WOMEN.test(String(teams || ""));
+// --- which events this plugin shows --------------------------------------
+
+// Anything that is not football: the agenda also carries padel, tennis, motor racing, US sports.
+// Matched against `plain()` text, so no accents here.
+const NOT_FOOTBALL =
+  /\b(sports|padel|tenis|tennis|atp|wta|f1|formula|motogp|moto gp|nba|nfl|nhl|mlb|ufc|fiba|boxeo|boxing|rugby|cricket|golf|volei|beisbol|ciclismo|atletismo|knockout|lfa)\b/;
+
+// Women's football is out on request: competitions, team lines and tags.
+const WOMEN =
+  /femen|women|\bwsl\b|\bnwsl\b|damer|feminin|frauen|femminile|shebelieves/;
+
+function isFootball(competition, teams) {
+  const text = plain(competition) + " " + plain(teams);
+  if (NOT_FOOTBALL.test(text)) return false;
+  if (WOMEN.test(text)) return false;
+  return true;
+}
+
+// --- team names -----------------------------------------------------------
+
+const CLUB_WORDS = {
+  fc: 1, cf: 1, sc: 1, ac: 1, cd: 1, ca: 1, csd: 1, afc: 1, as: 1, us: 1, ss: 1, ssc: 1,
+  cfc: 1, bk: 1, if: 1, ff: 1, sk: 1, fk: 1, kf: 1, club: 1, sa: 1, sad: 1, ec: 1, sd: 1,
+  ad: 1, the: 1, de: 1, del: 1, do: 1, da: 1, dos: 1, das: 1, al: 1, y: 1, and: 1,
+  // the agenda names a club after its city as often as it does not
+  jeddah: 1, riyadh: 1, saudi: 1, dammam: 1,
+};
+
+// Short forms the source uses next to the full name, so one fixture reads as one.
+const ALIAS = {
+  utd: "united",
+  atl: "atletico",
+  dep: "deportivo",
+  ath: "athletic",
+  univ: "universidad",
+  psg: "paris saint germain",
+  om: "olympique marseille",
+  ol: "olympique lyonnais",
+};
+
+function teamWords(name) {
+  const out = [];
+  const words = plain(name).split(" ");
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    if (!word) continue;
+    const alias = ALIAS[word];
+    if (alias) {
+      const parts = alias.split(" ");
+      for (let j = 0; j < parts.length; j++) out.push(parts[j]);
+      continue;
+    }
+    if (word.length > 1 && !CLUB_WORDS[word]) out.push(word);
+  }
+  return out;
+}
+
+function sameSide(a, b) {
+  const left = teamWords(a);
+  const right = teamWords(b);
+  if (!left.length || !right.length) return false;
+  let common = 0;
+  for (let i = 0; i < left.length; i++) if (right.indexOf(left[i]) !== -1) common++;
+  if (!common) return false;
+  const union = left.length + right.length - common;
+  return common / union >= 0.5 || common === Math.min(left.length, right.length);
+}
+
+// Two agenda rows at the same minute describe one fixture when both sides read alike.
+function sameFixture(a, b) {
+  if (a.at !== b.at) return false;
+  return (
+    (sameSide(a.home, b.home) && sameSide(a.away, b.away)) ||
+    (sameSide(a.home, b.away) && sameSide(a.away, b.home))
+  );
+}
+
+function splitTeams(teams) {
+  const text = clean(teams);
+  const m = /\s+vs\.?\s+/i.exec(text);
+  if (!m) return [text, ""];
+  return [text.slice(0, m.index).trim(), text.slice(m.index + m[0].length).trim()];
+}
+
+// --- covers ---------------------------------------------------------------
+
+// A match has no poster on the site (its social card is 16:9 text, which crops badly in a
+// channel tile), so the cover is a square tile the image service draws: both teams over a
+// colour that stays the same for a competition, match after match.
+const TILE_COLORS = ["0A7A42", "14405A", "3E2A5A", "4A1F2E", "1F3A22", "6A3D0E", "2A2A2A", "5A2A18"];
+
+function tileColor(competition) {
+  const text = plain(competition);
+  let sum = 0;
+  for (let i = 0; i < text.length; i++) sum = (sum * 31 + text.charCodeAt(i)) % 100000;
+  return TILE_COLORS[sum % TILE_COLORS.length];
+}
+
+function shortName(name) {
+  const text = clean(name);
+  if (text.length <= 24) return text;
+  const cut = text.slice(0, 24);
+  const space = cut.lastIndexOf(" ");
+  return (space > 8 ? cut.slice(0, space) : cut).trim();
+}
+
+function matchLogo(event) {
+  const home = shortName(event.home || event.teams);
+  const away = shortName(event.away);
+  const text = encodeURIComponent(home) + "%5Cnvs%5Cn" + (away ? encodeURIComponent(away) : "");
+  return "https://placehold.co/300x300/" + tileColor(event.competition) + "/FFFFFF/png?font=roboto&text=" + text;
 }
 
 // --- agenda parsing -------------------------------------------------------
 
 function parseAgenda(html, now) {
   const events = [];
-  const bySlug = Object.create(null);
-  const byMatch = Object.create(null);
   const chunks = String(html || "").split("data-agenda-event");
 
   for (let i = 1; i < chunks.length; i++) {
     const chunk = chunks[i];
     const slug = (/href="\/match\/([^"#?]+)#source=\d+"/.exec(chunk) || [])[1];
-    if (!slug || bySlug[slug]) continue;
+    if (!slug) continue;
 
     const sources = [];
     const srcRe = /href="\/match\/([^"#?]+)#source=(\d+)"/g;
@@ -122,48 +229,59 @@ function parseAgenda(html, now) {
       if (teams.toLowerCase().indexOf(prefix) === 0) teams = teams.slice(prefix.length).trim();
     }
 
-    if (!isFootball(competition) || isWomen(competition, teams)) continue;
+    if (!isFootball(competition, teams)) continue;
 
     const start = (/data-source-instant="([^"]+)"/.exec(chunk) || [])[1] || "";
     const at = start ? new Date(start).getTime() : 0;
     if (!at || isNaN(at)) continue;
 
-    // A match that finished a while ago is not a channel any more.
+    // Finished a while ago, or so far out it is not today's problem.
     if (at + MATCH_WINDOW_MS < now) continue;
+    if (at > now + AHEAD_MS) continue;
 
-    // The agenda repeats some matches under two competition names: one card is enough,
-    // and the copy with more sources is the one worth keeping.
-    const key = teams.toLowerCase() + "@" + at;
-    const previous = byMatch[key];
-    if (previous !== undefined) {
-      if (events[previous].sources.length >= sources.length) continue;
-      events.splice(previous, 1);
-      reindex(events, byMatch);
-    }
-    byMatch[key] = events.length;
-    bySlug[slug] = true;
-
-    events.push({
-      slug: slug,
-      competition: competition,
-      teams: teams,
-      start: start,
-      at: at,
-      sources: sources.slice(0, 6),
-    });
+    const sides = splitTeams(teams);
+    events.push(makeEvent(slug, competition, teams, sides, at, sources));
   }
 
-  events.sort(function (a, b) {
+  const unique = dedupeEvents(events);
+
+  unique.sort(function (a, b) {
     if (a.at !== b.at) return a.at - b.at;
     return a.teams < b.teams ? -1 : a.teams > b.teams ? 1 : 0;
   });
-  return events;
+  return unique;
 }
 
-function reindex(events, byMatch) {
+// The agenda repeats a fixture under two competition names (Pro League / Saudi Pro League,
+// Liga Chile / Primera División, "Sheffield Utd" / "Sheffield United"): one card survives,
+// the copy with more sources, or the one whose competition name is the fuller.
+function dedupeEvents(events) {
+  const kept = [];
   for (let i = 0; i < events.length; i++) {
-    byMatch[events[i].teams.toLowerCase() + "@" + events[i].at] = i;
+    const event = events[i];
+    let merged = false;
+    for (let k = 0; k < kept.length; k++) {
+      if (!sameFixture(kept[k], event)) continue;
+      if (event.sources.length > kept[k].sources.length) kept[k] = event;
+      else if (event.competition.length > kept[k].competition.length) kept[k].competition = event.competition;
+      merged = true;
+      break;
+    }
+    if (!merged) kept.push(event);
   }
+  return kept;
+}
+
+function makeEvent(slug, competition, teams, sides, at, sources) {
+  return {
+    slug: slug,
+    competition: competition,
+    teams: teams,
+    home: sides[0],
+    away: sides[1],
+    at: at,
+    sources: sources.slice(0, 6),
+  };
 }
 
 // --- channels page --------------------------------------------------------
@@ -268,9 +386,9 @@ async function getJson(url) {
   return await res.json();
 }
 
-// --- the capability list --------------------------------------------------
+// --- En vivo --------------------------------------------------------------
 
-// En vivo is the home of this plugin: no catalogue rows, only channels.
+// This plugin lives in En vivo only: no catalogue rows.
 export async function home() {
   return [];
 }
@@ -278,25 +396,53 @@ export async function home() {
 export async function liveCategories() {
   return [
     { id: "vivo", title: t("Partidos en vivo", "Live matches"), genre: "deportes" },
-    { id: "proximos", title: t("Próximos partidos", "Upcoming matches"), genre: "deportes" },
     { id: "canales", title: t("Canales deportivos", "Sports channels"), genre: "deportes" },
+    { id: "proximos", title: t("Próximos partidos", "Upcoming matches"), genre: "deportes" },
   ];
 }
 
-function matchChannel(event, categoryId) {
+function isLive(event, now) {
+  return now >= event.at - EARLY_MS && now < event.at + MATCH_WINDOW_MS;
+}
+
+const DAYS_ES = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+const DAYS_EN = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+
+function midnight(ms) {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+// A match after midnight is tomorrow, not "later today": say so in front of the hour.
+function dayLabel(ms, now) {
+  const days = Math.round((midnight(ms) - midnight(now)) / 86400000);
+  if (!days) return "";
+  if (days === 1) return t("mañana", "tomorrow");
+  const names = isEnglish() ? DAYS_EN : DAYS_ES;
+  return names[new Date(ms).getDay()] || "";
+}
+
+function matchChannel(event, categoryId, now) {
+  const upcoming = event.at > now + EARLY_MS;
+  let prefix = "";
+  if (upcoming) {
+    const day = dayLabel(event.at, now);
+    prefix = (day ? day + " " : "") + clockText(event.at) + " · ";
+  }
   return {
     id: "m-" + event.slug,
-    title: event.teams.slice(0, 200),
+    title: prefix + event.teams.slice(0, 300),
     categoryId: categoryId,
     ref: "m~" + event.slug + "~" + event.at + "~" + event.sources.join("."),
-    logo: SITE + "/og/match/" + encodeURIComponent(event.slug) + ".png",
+    logo: matchLogo(event),
   };
 }
 
 function sportsChannel(entry, index, categoryId) {
   return {
     id: "c-" + entry.slug,
-    title: String(entry.name || entry.slug).slice(0, 200),
+    title: String(entry.name || entry.slug).slice(0, 300),
     categoryId: categoryId,
     ref: "c~" + entry.slug,
     logo: entry.logo || DEFAULT_LOGO,
@@ -327,11 +473,11 @@ export async function liveChannels(arg) {
 
   const events = await agendaEvents();
   const now = Date.now();
-  let selected = [];
+  let selected;
 
   if (categoryId === "vivo") {
     selected = events.filter(function (event) {
-      return now >= event.at - EARLY_MS && now < event.at + MATCH_WINDOW_MS;
+      return isLive(event, now);
     });
   } else if (categoryId === "proximos") {
     selected = events.filter(function (event) {
@@ -342,30 +488,30 @@ export async function liveChannels(arg) {
   }
 
   const all = selected.map(function (event) {
-    return matchChannel(event, categoryId);
+    return matchChannel(event, categoryId, now);
   });
   return pageOf(all, cursor, MATCH_PAGE);
 }
 
 export async function liveSearch(arg) {
   await null;
-  const query = clean((arg && arg.query) || "").toLowerCase();
+  const query = plain((arg && arg.query) || "");
   if (query.length < 2) return { items: [] };
 
-  const words = query.split(/\s+/).filter(function (word) {
+  const words = query.split(" ").filter(function (word) {
     return word.length > 0;
   });
-
+  const now = Date.now();
   const hits = [];
 
   try {
     const events = await agendaEvents();
     for (let i = 0; i < events.length && hits.length < 60; i++) {
       const event = events[i];
-      const hay = (event.teams + " " + event.competition).toLowerCase();
+      const hay = plain(event.teams + " " + event.competition);
       if (!words.every(function (word) { return hay.indexOf(word) !== -1; })) continue;
-      const item = matchChannel(event, Date.now() >= event.at - EARLY_MS ? "vivo" : "proximos");
-      item.ref = "m~" + event.slug + "~" + event.at + "~" + event.sources.join(".");
+      const live = isLive(event, now);
+      const item = matchChannel(event, live ? "vivo" : "proximos", now);
       item.adult = false;
       hits.push(item);
     }
@@ -377,8 +523,10 @@ export async function liveSearch(arg) {
     const channels = await channelList();
     for (let i = 0; i < channels.length && hits.length < 100; i++) {
       const entry = channels[i];
-      if (entry.name.toLowerCase().indexOf(query) === -1) continue;
-      hits.push(sportsChannel(entry, i, "canales"));
+      if (plain(entry.name).indexOf(query) === -1) continue;
+      const item = sportsChannel(entry, i, "canales");
+      item.adult = false;
+      hits.push(item);
     }
   } catch (e) {
     log("live search channels failed", e && e.message);
@@ -409,7 +557,7 @@ export async function guide(arg) {
     if (end <= from || start >= to) continue;
     out.push({
       channelId: id,
-      title: event.teams.slice(0, 200),
+      title: event.teams.slice(0, 300),
       start: start,
       end: end,
       description: event.competition.slice(0, 200),
@@ -490,7 +638,7 @@ async function resolveMatch(payload) {
   if (!slug) return null;
 
   const now = Date.now();
-  if (at && now < at - 5 * 60 * 1000) {
+  if (at && now < at - EARLY_MS) {
     throw kino.error("not_found", "el partido aún no comienza", {
       userMessage: t(
         "Este partido empieza a las " + clockText(at) + ". Vuelve cuando esté al aire.",

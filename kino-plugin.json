@@ -1,7 +1,7 @@
 {
   "id": "football-plugin",
   "name": "Fútbol en vivo",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "apiVersion": 15,
   "entry": "plugin.js",
   "icon": "icon.png",
@@ -19,7 +19,7 @@
   ],
   "capabilities": ["home", "resolve", "channels"],
   "liveStreamHosts": "any",
-  "description": "Partidos de fútbol y canales deportivos en la pestaña En vivo: Champions, Europa League, La Liga, Premier League, Serie A, Bundesliga, Ligue 1 y ligas de Sudamérica.",
+  "description": "Partidos y canales deportivos en la pestaña En vivo: solo los partidos que están al aire, los próximos con su hora y su carátula, y el directorio de canales (ESPN, DSports, Fox Sports, TNT Sports, TyC Sports, Win Sports, DAZN, TUDN) para cuando no hay partidos. Sin fútbol femenino.",
   "author": "gregortt1",
   "homepage": "https://github.com/gregortt1/football-plugin"
 }
