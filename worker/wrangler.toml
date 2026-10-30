@@ -1,0 +1,6 @@
+# Compone los dos escudos de un partido en un solo PNG de 600x300 (local a la izquierda,
+# visitante a la derecha). Kino pide una imagen por canal en En vivo, así que esta es la que
+# se le entrega. Solo descarga escudos de los hosts de ALLOWED.
+name = "crest-composer"
+main = "crest-worker.js"
+compatibility_date = "2026-01-01"

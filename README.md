@@ -43,6 +43,13 @@ reserva quedan afuera, y también las entradas duplicadas o con un rival que no 
 Cada partido lleva el escudo del club local y cada canal lleva su logo. La búsqueda de En vivo
 encuentra equipos y canales por nombre, y la guía de TV muestra a qué hora empieza cada partido.
 
+## Los dos escudos
+
+En la grilla de En vivo, Kino acepta una sola imagen por canal, así que por defecto el partido
+muestra el escudo del equipo local. Si querés los dos, hay un Worker de Cloudflare en
+`worker/` que compone los dos escudos en una imagen: se despliega una vez, y su dirección se
+pega en **Plugins ▸ Fútbol en vivo ▸ Configurar ▸ Compositor de escudos**. Las instrucciones
+están en [`worker/README.md`](worker/README.md). Sin ese ajuste, todo sigue funcionando igual.
 ## Cuando una señal no anda
 
 Cada canal tiene una o varias fuentes. El plugin las recorre en orden, saltea las que el propio

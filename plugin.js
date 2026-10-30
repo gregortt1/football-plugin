@@ -223,7 +223,30 @@ function shortName(name) {
   return (space > 8 ? cut.slice(0, space) : cut).trim();
 }
 
+// The two crests in one image: the worker set in Ajustes does the drawing, because Kino's
+// live channel takes a single picture. Without it, the home crest stands alone.
+function crestWorker() {
+  try {
+    const value = String(kino.config.get("crestWorker") || "").trim();
+    if (!/^https:\/\/[^\/\s]+/i.test(value)) return "";
+    return value;
+  } catch (e) {
+    return "";
+  }
+}
+
 function matchLogo(event) {
+  if (event.crest && event.crestAway) {
+    const worker = crestWorker();
+    if (worker) {
+      return (
+        worker +
+        (worker.indexOf("?") === -1 ? "?" : "&") +
+        "a=" + encodeURIComponent(event.crest) +
+        "&b=" + encodeURIComponent(event.crestAway)
+      );
+    }
+  }
   if (event.crest) return event.crest;
 
   const home = shortName(event.home || event.teams);
@@ -449,6 +472,7 @@ async function confirmFixtures(events, now) {
       at: confirmed.fixture.at,
       sources: event.sources,
       crest: confirmed.fixture.homeLogo,
+      crestAway: confirmed.fixture.awayLogo,
       espnId: confirmed.fixture.id,
     });
   }
