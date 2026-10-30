@@ -1,9 +1,9 @@
 # Fútbol en vivo — plugin de Kino
 
-Partidos y canales deportivos dentro de la pestaña **En vivo** de Kino: Champions
-League, Europa League, La Liga, Premier League, Serie A, Bundesliga, Ligue 1, Liga MX,
-Brasileirão, Liga Profesional y el resto de ligas de Sudamérica, más el directorio de
-canales deportivos para cuando no hay partidos.
+Partidos y canales deportivos dentro de la pestaña **En vivo** de Kino: Champions, Europa
+League, La Liga, Premier League, Serie A, Bundesliga, Ligue 1, Liga MX, Brasileirão, Liga
+Profesional y el resto de ligas de Sudamérica, más los canales deportivos para cuando no hay
+partidos.
 
 ## Cómo se instala
 
@@ -14,82 +14,68 @@ canales deportivos para cuando no hay partidos.
    gregortt1/football-plugin
    ```
 
-3. Acepta e instala (Kino avisa que el plugin agrega canales en vivo).
+3. Acepta e instala. Kino te va a avisar de dos cosas: que agrega canales en vivo a la pestaña
+   En vivo, y que puede reproducir canales desde cualquier servidor que indique su lista.
 
-Este repositorio **no está publicado en la tienda de Kino**: solo se instala escribiendo
-la dirección de arriba.
+El plugin no está en la tienda de Kino: solo se instala escribiendo esa dirección. Para
+actualizarlo, entra en **Plugins ▸ Instalados** y busca la actualización; no hace falta
+desinstalar.
 
-## Qué muestra
+## Qué vas a ver
 
-Todo vive en **En vivo**, en tres categorías con el nombre del plugin:
+Todo aparece en **En vivo**, en tres filas con el nombre del plugin:
 
-- **Partidos en vivo**: solo los partidos que ya empezaron (o que empiezan en los próximos
-  10 minutos) y todavía no terminaron. Nada de partidos que arrancan más tarde: si no
-  empezó, no aparece acá.
-- **Canales deportivos**: ESPN, DSports, Fox Sports, TNT Sports, TyC Sports, Win Sports,
-  DAZN, LaLiga TV, Movistar Deportes, TUDN, Azteca Deportes y el resto del directorio.
-  Siempre está: si no hay partidos a esta hora, acá hay algo que ver.
-- **Próximos partidos**: la agenda que todavía no empieza, con la hora delante
-  (`15:00 · Le Havre vs PSG`) y `mañana` cuando el partido cae después de medianoche.
-  Si lo abres antes de la hora, Kino dice a qué hora empieza en vez de abrir una señal muerta.
+**Partidos en vivo** — solo lo que está jugando ahora (o arranca en los próximos 10 minutos).
+Un partido que empieza a las nueve de la noche no aparece acá a las tres de la tarde.
 
-Cada partido lleva su carátula: el escudo del equipo local (o el del visitante si falta) y,
-cuando el club no está en el mapa de escudos, la tarjeta del partido con competición, equipos,
-hora y fecha. Cada canal lleva su logo.
+**Canales deportivos** — el directorio completo, siempre disponible. Si no hay partidos a esta
+hora, acá hay algo.
 
-La búsqueda de En vivo encuentra equipos y canales por nombre, sin acentos y sin importar
-mayúsculas, y la guía de TV muestra a qué hora empieza cada partido.
+**Próximos partidos** — la agenda que todavía no empezó, con la hora delante
+(`15:00 · Le Havre vs PSG`) y `mañana` cuando el partido cae después de medianoche. Si lo
+abres antes de la hora, Kino te dice a qué hora empieza en vez de abrir una señal muerta.
 
-No se listan partidos de fútbol femenino, ni deportes que no son fútbol (pádel, tenis, F1,
-NBA, NFL, MLB, MotoGP, boxeo, golf y compañía), aunque la agenda del sitio los incluya.
+Cada partido lleva su carátula con los dos equipos sobre el color de la competición; cada canal
+lleva su logo. La búsqueda de En vivo encuentra equipos y canales por nombre, y la guía de TV
+muestra a qué hora empieza cada partido.
 
-## Cómo funciona
+## Los ESPN y Fox Sports vienen por país
 
-1. Lee la agenda de `pelotalibre.biz` y se queda solo con los partidos de fútbol.
-2. Un mismo partido aparece repetido en la agenda bajo dos competiciones
-   (`Saudi Pro League` / `Pro League`) o con dos formas del nombre
-   (`Sheffield United` / `Sheffield Utd`): se comparan los nombres normalizados y los
-   equipos del mismo horario, y queda una sola tarjeta, la que tiene más fuentes.
-3. Cada partido ofrece varias fuentes; el plugin prueba una por una y devuelve la señal
-   que realmente está emitiendo (comprueba que el manifiesto HLS responda antes de
-   entregarlo).
-4. Los canales se resuelven igual, pero por el endpoint de canales del sitio.
-
-## Las carátulas
-
-Cada partido lleva una carátula cuadrada con los dos equipos (`Le Havre / vs / PSG`) sobre un
-color que se repite para toda la competición: el mismo tono para todos los partidos de Ligue 1,
-otro para LaLiga, otro para el Brasileirão. La dibuja un servicio de imágenes a partir del
-nombre, así que no hay tabla de escudos que mantener ni una foto que se rompa cuando cambia un
-equipo. Los escudos reales de los clubes no están todavía: el sitio no los publica, y el mapa
-de escudos quedó pendiente de una fuente que aguante consultas (ver más abajo).
-
-## Probar sin la app
-
-El kit oficial del SDK corre el plugin como lo hace Kino (sandbox QuickJS, sin `fetch` ni
-`require`, con las reglas de verdad del manifiesto):
+Un ESPN 2 de Argentina no es el ESPN 2 de México: son señales distintas, con relato y publicidad
+distintos. Por eso esos canales aparecen separados y con el país en el nombre:
 
 ```
-node sdk/validate.mjs .
-node sdk/run.mjs . live categories
-node sdk/run.mjs . live channels vivo
-node sdk/run.mjs . live channels canales
-node sdk/run.mjs . live channels proximos
-node sdk/run.mjs . live search boca
-node sdk/run.mjs . live guide m-le-havre-vs-psg
-node sdk/run.mjs . resolve 'm~le-havre-vs-psg~1793383200000~10403'
+ESPN 1 (Argentina)     ESPN 1 (México)
+ESPN 2 (Argentina)     ESPN 2 (México)
+ESPN 3 (Argentina)     ESPN 3 (México)
+Fox Sports 1 (Argentina)   Fox Sports 1 (México)
+Fox Sports 2 (Argentina)   Fox Sports 2 (México)
+Fox Sports 3 (Argentina)   Fox Sports 3 (México)
 ```
 
-`kino.d.ts` está ahí para el editor. El kit escribe `.kino-cookies.json` y
-`.kino-shared.json`: los dos están en `.gitignore`.
+Lo que elegís es lo que ves: el plugin nunca te cambia una señal argentina por una mexicana sin
+avisarte. El resto de los canales va con su nombre a secas, porque no tiene esa ambigüedad.
 
-## Estructura
+## Cuando una señal no anda
 
-```
-kino-plugin.json   manifiesto (id, hosts, capacidades)
-plugin.js          código del plugin (un solo archivo, sin dependencias) + mapa de escudos
-icon.png           icono 96×96
-sdk/               kit de pruebas de Kino (no lo usa la app)
-kino.d.ts          tipos del objeto kino
-contract.json      contrato del kit
-```
+Cada canal tiene una o varias fuentes. El plugin las recorre en orden, saltea las que el propio
+sitio ya marca como caídas, y antes de darte una señal comprueba que el manifiesto responda
+**y** que el primer fragmento de video exista. Si ninguna responde, Kino te avisa en vez de
+dejarte mirando una pantalla negra.
+
+Igual pasa: estas señales son de terceros y se caen sin aviso. Si un canal no abre, probá otro
+rato o abrí otro canal; no es algo que el plugin pueda arreglar desde acá.
+
+No se listan partidos de fútbol femenino, ni deportes que no son fútbol (pádel, tenis, F1, NBA,
+NFL, MLB, MotoGP, boxeo, golf), aunque la agenda del sitio los incluya.
+
+## Si algo no aparece
+
+- **No veo la pestaña En vivo con el plugin**: revisá que la instalación haya terminado y que el
+  consentimiento de canales en vivo esté aceptado.
+- **Los canales tardan en cambiar**: Kino guarda la lista de canales una hora. Si acaba de
+  empezar un partido y todavía no aparece, esperá o reiniciá la app.
+- **Kino pide una versión más nueva**: el plugin usa la versión de plugins más reciente de Kino.
+
+Para reportar algo, abrí el plugin en **Plugins ▸ Instalados**, activá **Modo debug** y mandá el
+registro junto con el nombre del canal o del partido.

@@ -9,6 +9,37 @@ const MATCH_URL = SITE + "/match/";
 const PLAYBACK_URL = SITE + "/api/direct-playback.php";
 const DEFAULT_LOGO = SITE + "/assets/channel-logos/default-channel.svg";
 
+// Two sister sites carry the same channel names with the country in the open: one serves the
+// Argentine feed, the other the Mexican one. ESPN 2 in Buenos Aires and ESPN 2 in Ciudad de
+// México are different signals, so each is listed as its own channel, never swapped.
+const AR_SITE = "https://futbollibreplay.org";
+const MX_SITE = "https://librefutbol.pro";
+
+const COUNTRY_FEEDS = [
+  {
+    source: "ar",
+    site: AR_SITE,
+    label: function () { return t("Argentina", "Argentina"); },
+    // the Argentine site only carries the ESPN feeds; its Fox Sports pages are gone
+    slugs: ["espn-1", "espn-2", "espn-3"],
+  },
+  {
+    source: "mx",
+    site: MX_SITE,
+    label: function () { return t("México", "Mexico"); },
+    slugs: ["espn-1", "espn-2", "espn-3", "fox-sports-1", "fox-sports-2", "fox-sports-3"],
+  },
+];
+
+const FEED_NAMES = {
+  "espn-1": "ESPN 1",
+  "espn-2": "ESPN 2",
+  "espn-3": "ESPN 3",
+  "fox-sports-1": "Fox Sports 1",
+  "fox-sports-2": "Fox Sports 2",
+  "fox-sports-3": "Fox Sports 3",
+};
+
 const UA =
   "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36";
@@ -18,8 +49,8 @@ const CHANNELS_CACHE_MS = 300000;
 const STREAM_CACHE_MS = 120000;
 const MATCH_PAGE = 300;
 const CHANNEL_PAGE = 300;
-const MAX_SOURCES = 4;
-const MAX_SERVERS = 2;
+const MAX_SOURCES = 3;
+const MAX_SERVERS = 3;
 
 // A football match runs up to two hours with half time and stoppage time.
 const MATCH_WINDOW_MS = 165 * 60 * 1000;
@@ -439,13 +470,60 @@ function matchChannel(event, categoryId, now) {
   };
 }
 
-function sportsChannel(entry, index, categoryId) {
+// One list of stations: the site's own directory, with the six channels that exist in both
+// an Argentine and a Mexican feed replaced by those two, each named with its country.
+async function stationList() {
+  const base = await channelList();
+  const bySlug = Object.create(null);
+  for (let i = 0; i < base.length; i++) bySlug[base[i].slug] = base[i];
+
+  const split = Object.create(null);
+  for (let f = 0; f < COUNTRY_FEEDS.length; f++) {
+    const slugs = COUNTRY_FEEDS[f].slugs;
+    for (let s = 0; s < slugs.length; s++) split[slugs[s]] = true;
+  }
+
+  const out = [];
+  for (let i = 0; i < base.length; i++) {
+    const entry = base[i];
+    if (split[entry.slug]) continue;
+    out.push({ id: "c-" + entry.slug, title: entry.name, ref: "c~" + entry.slug, logo: entry.logo || DEFAULT_LOGO });
+  }
+
+  for (let f = 0; f < COUNTRY_FEEDS.length; f++) {
+    const feed = COUNTRY_FEEDS[f];
+    for (let s = 0; s < feed.slugs.length; s++) {
+      const slug = feed.slugs[s];
+      const entry = bySlug[slug];
+      const name = FEED_NAMES[slug] || (entry && entry.name) || slug;
+      out.push({
+        id: "f-" + feed.source + "-" + slug,
+        title: name + " (" + feed.label() + ")",
+        ref: "f~" + feed.source + "~" + slug,
+        logo: (entry && entry.logo) || DEFAULT_LOGO,
+      });
+    }
+  }
+
+  // the same name twice is the same channel twice: keep the first
+  const seen = Object.create(null);
+  const unique = [];
+  for (let i = 0; i < out.length; i++) {
+    const key = plain(out[i].title);
+    if (seen[key]) continue;
+    seen[key] = true;
+    unique.push(out[i]);
+  }
+  return unique;
+}
+
+function sportsChannel(station, index, categoryId) {
   return {
-    id: "c-" + entry.slug,
-    title: String(entry.name || entry.slug).slice(0, 300),
+    id: station.id,
+    title: String(station.title || station.id).slice(0, 300),
     categoryId: categoryId,
-    ref: "c~" + entry.slug,
-    logo: entry.logo || DEFAULT_LOGO,
+    ref: station.ref,
+    logo: station.logo || DEFAULT_LOGO,
     number: (index % 9999) + 1,
   };
 }
@@ -464,9 +542,9 @@ export async function liveChannels(arg) {
   if (!isFinite(cursor) || cursor < 0) throw kino.error("not_found", "cursor inválido");
 
   if (categoryId === "canales") {
-    const list = await channelList();
-    const all = list.map(function (entry, index) {
-      return sportsChannel(entry, index, categoryId);
+    const list = await stationList();
+    const all = list.map(function (station, index) {
+      return sportsChannel(station, index, categoryId);
     });
     return pageOf(all, cursor, CHANNEL_PAGE);
   }
@@ -520,11 +598,11 @@ export async function liveSearch(arg) {
   }
 
   try {
-    const channels = await channelList();
-    for (let i = 0; i < channels.length && hits.length < 100; i++) {
-      const entry = channels[i];
-      if (plain(entry.name).indexOf(query) === -1) continue;
-      const item = sportsChannel(entry, i, "canales");
+    const stations = await stationList();
+    for (let i = 0; i < stations.length && hits.length < 100; i++) {
+      const station = stations[i];
+      if (plain(station.title).indexOf(query) === -1) continue;
+      const item = sportsChannel(station, i, "canales");
       item.adult = false;
       hits.push(item);
     }
@@ -580,6 +658,7 @@ export async function resolve(ref) {
 
   let stream = null;
   if (key.indexOf("c~") === 0) stream = await resolveChannel(key.slice(2));
+  else if (key.indexOf("f~") === 0) stream = await resolveFeed(key.slice(2));
   else if (key.indexOf("m~") === 0) stream = await resolveMatch(key.slice(2));
   else throw kino.error("not_found", "referencia desconocida");
 
@@ -596,20 +675,48 @@ export async function resolve(ref) {
   return stream;
 }
 
+// A channel on the site declares one to three servers on its own page (Fuente 1, 2, 3). Those
+// are mirrors of the same feed, so walking them in order is safe: the same channel stays the
+// same channel, only the road changes.
 async function resolveChannel(slug) {
-  const serverOrder = [1, 4];
-  let attempts = 0;
+  const servers = await channelServers(slug);
+  let dead = 0;
 
-  for (let i = 0; i < serverOrder.length && attempts < MAX_SERVERS; i++) {
-    attempts++;
+  for (let i = 0; i < servers.length && i < MAX_SERVERS; i++) {
     try {
-      const stream = await channelFromServer(slug, serverOrder[i]);
+      const answer = await channelFromServer(slug, servers[i]);
+      if (!answer) continue;
+      if (answer.health === "failed") {
+        dead++;
+        continue;
+      }
+      if (!answer.url) continue;
+      const stream = await streamFromRelay(answer.url);
       if (stream) return stream;
     } catch (e) {
-      log("channel source failed", slug, serverOrder[i], e && e.message);
+      log("channel source failed", slug, servers[i], e && e.message);
     }
   }
+  log("channel exhausted", slug, "dead sources:", dead);
   return null;
+}
+
+async function channelServers(slug) {
+  const fallback = [4, 1, 3];
+  try {
+    const page = await getText(SITE + "/channel/" + encodeURIComponent(slug));
+    const found = [];
+    const re = /data-server="(\d+)"[^>]*data-source="\d+"/g;
+    let m;
+    while ((m = re.exec(page))) {
+      const server = Number(m[1]);
+      if (server && found.indexOf(server) === -1) found.push(server);
+    }
+    if (found.length) return found;
+  } catch (e) {
+    log("channel page failed", slug, e && e.message);
+  }
+  return fallback;
 }
 
 async function channelFromServer(slug, server) {
@@ -622,8 +729,37 @@ async function channelFromServer(slug, server) {
     "&automatic=1";
 
   const answer = await getJson(url);
-  if (!answer || !answer.url) return null;
-  return streamFromRelay(String(answer.url));
+  if (!answer) return null;
+  return { url: answer.url ? String(answer.url) : "", health: String(answer.health || "") };
+}
+
+// The country feeds live on their own site: one page per channel, wrapping the relay the same
+// way every other page here does. Each entry is pinned to its country, so nothing is swapped.
+async function resolveFeed(payload) {
+  const parts = String(payload || "").split("~");
+  const source = parts[0];
+  const slug = parts[1];
+  if (!slug) return null;
+
+  let site = "";
+  for (let i = 0; i < COUNTRY_FEEDS.length; i++) {
+    if (COUNTRY_FEEDS[i].source === source) site = COUNTRY_FEEDS[i].site;
+  }
+  if (!site) return null;
+
+  try {
+    const pageUrl = site + "/en-vivo/" + encodeURIComponent(slug);
+    const page = await getText(pageUrl);
+    const playlist = await playlistFromHtml(page, pageUrl, 0);
+    if (!playlist) return null;
+
+    const streamUrl = normalise(playlist);
+    if (!streamUrl || !(await alive(streamUrl))) return null;
+    return { url: streamUrl, mime: "application/x-mpegURL" };
+  } catch (e) {
+    log("feed failed", source, slug, e && e.message);
+    return null;
+  }
 }
 
 async function resolveMatch(payload) {
@@ -707,38 +843,97 @@ async function streamFromRelay(url) {
   return { url: streamUrl, mime: "application/x-mpegURL" };
 }
 
-// A relay happily hands out a playlist for a channel that is off: read it before promising it.
+// A relay happily hands out a playlist for a channel that is off: read it, walk to a variant
+// and touch the first segment before promising it. A manifest that answers is not a stream.
+const PROBE_BYTES = 65536;
+
 async function alive(url) {
   try {
-    const res = await kino.fetch(url, { headers: { "User-Agent": UA } });
-    if (!res || !res.ok) return false;
-    const head = (await res.text()).slice(0, 80);
-    return head.indexOf("#EXTM3U") === 0;
+    const manifest = await fetchCap(url);
+    if (!manifest) return false;
+
+    let text = manifest.text;
+    let base = url;
+    if (text.indexOf("#EXTM3U") !== 0) return false;
+
+    // a master playlist names its variants: one of them is the video
+    if (text.indexOf("#EXT-X-STREAM-INF") !== -1) {
+      const variant = firstUri(text, base, true);
+      if (!variant) return false;
+      const child = await fetchCap(variant);
+      if (!child) return false;
+      text = child.text;
+      base = variant;
+      if (text.indexOf("#EXTM3U") !== 0) return false;
+    }
+
+    // a finished stream is a dead channel
+    if (text.indexOf("#EXT-X-ENDLIST") !== -1) return false;
+
+    const segment = firstUri(text, base, false);
+    if (!segment) return false;
+
+    const head = await fetchCap(segment);
+    return !!head;
   } catch (e) {
     log("probe failed", e && e.message);
     return false;
   }
 }
 
+async function fetchCap(url) {
+  try {
+    const res = await kino.fetch(url, { headers: { "User-Agent": UA }, maxBytes: PROBE_BYTES });
+    if (!res || !res.ok) return null;
+    return { text: await res.text(), status: res.status };
+  } catch (e) {
+    return null;
+  }
+}
+
+// The first URI of a playlist: after #EXT-X-STREAM-INF for a master, after #EXTINF for a media.
+function firstUri(text, base, variant) {
+  const lines = String(text).split(/\r?\n/);
+  const tag = variant ? "#EXT-X-STREAM-INF" : "#EXTINF";
+  let seen = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    if (line.charAt(0) === "#") {
+      if (line.indexOf(tag) === 0) seen = true;
+      continue;
+    }
+    if (!seen) continue;
+    return absoluteUrl(line, base);
+  }
+  return null;
+}
 async function playlistAt(url) {
   const page = await getText(url);
-  let found = playbackFrom(page);
-  if (found) return found;
+  return await playlistFromHtml(page, url, 0);
+}
 
-  found = decodeStreamxhd(page);
+// Every relay wraps the same thing: a page that holds playbackURL, sometimes behind an iframe,
+// sometimes two of them (tvf90: canal.php -> 5.php -> playbackURL).
+async function playlistFromHtml(page, base, depth) {
+  const found = playbackFrom(page) || decodeStreamxhd(page) || findM3u8(page);
   if (found) return found;
-
-  found = findM3u8(page);
-  if (found) return found;
+  if (depth >= 3) return null;
 
   const src = (/<iframe[^>]+src=["']([^"']+)["']/i.exec(page) || [])[1];
   if (!src) return null;
 
-  const inner = absoluteUrl(decodeEntities(src), url);
+  const inner = absoluteUrl(decodeEntities(src), base);
   if (!inner) return null;
 
-  const page2 = await getText(inner);
-  return playbackFrom(page2) || decodeStreamxhd(page2) || findM3u8(page2);
+  let next;
+  try {
+    next = await getText(inner);
+  } catch (e) {
+    log("iframe failed", depth, e && e.message);
+    return null;
+  }
+  return await playlistFromHtml(next, inner, depth + 1);
 }
 
 function normalise(url) {
