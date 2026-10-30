@@ -2,3 +2,6 @@
 .kino-shared.json
 .kino-notices.json
 node_modules/
+
+.wrangler/
+worker/.wrangler/
