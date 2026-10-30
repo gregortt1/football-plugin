@@ -1,7 +1,7 @@
 {
   "id": "football-plugin",
   "name": "Fútbol en vivo",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "apiVersion": 15,
   "entry": "plugin.js",
   "icon": "icon.png",
@@ -9,6 +9,7 @@
   "categories": ["live"],
   "hosts": [
     "pelotalibre.biz",
+    "site.api.espn.com",
     "futbollibreplay.org",
     "librefutbol.pro",
     "tvf90.com",
@@ -21,7 +22,7 @@
   ],
   "capabilities": ["home", "resolve", "channels"],
   "liveStreamHosts": "any",
-  "description": "Partidos y canales en la pestaña En vivo: solo lo que está al aire, los próximos con su hora y su carátula, y los canales deportivos (ESPN y Fox Sports separados por país: Argentina y México; DSports, TNT Sports, TyC Sports, Win Sports, DAZN, TUDN) para cuando no hay partidos. Sin fútbol femenino.",
+  "description": "Partidos y canales en la pestaña En vivo: horarios y equipos confirmados con ESPN, escudos de los clubes, solo lo que está al aire, los próximos con su hora, y los canales deportivos (ESPN y Fox Sports separados por país: Argentina y México; DSports, TNT Sports, TyC Sports, Win Sports, DAZN, TUDN) para cuando no hay partidos. Sin fútbol femenino.",
   "author": "gregortt1",
   "homepage": "https://github.com/gregortt1/football-plugin"
 }

@@ -224,12 +224,237 @@ function shortName(name) {
 }
 
 function matchLogo(event) {
+  if (event.crest) return event.crest;
+
   const home = shortName(event.home || event.teams);
   const away = shortName(event.away);
   const text = encodeURIComponent(home) + "%5Cnvs%5Cn" + (away ? encodeURIComponent(away) : "");
   return "https://placehold.co/300x300/" + tileColor(event.competition) + "/FFFFFF/png?font=roboto&text=" + text;
 }
 
+// --- fixtures: ESPN, not the stream site -----------------------------------
+
+// The stream site's agenda carries whatever it can find: a youth cup with senior club names,
+// the same match under three competition names, kick-off times that move. ESPN's public
+// scoreboard is the reference for what is played, when, and who plays: it needs no key, and it
+// also hands the club crests over. A match only shows if ESPN confirms it.
+const ESPN = "https://site.api.espn.com/apis/site/v2/sports/soccer/";
+const ESPN_CACHE_MS = 10 * 60 * 1000;
+
+// Stream-site competition name -> the ESPN leagues that may hold it, and the name to show.
+const ESPN_LEAGUES = [
+  [/^ligue 1/i, ["fra.1"], "Ligue 1"],
+  [/^ligue 2/i, ["fra.2"], "Ligue 2"],
+  [/^laliga( smartbank)?/i, ["esp.2"], "LaLiga 2"],
+  [/^laliga/i, ["esp.1"], "LaLiga"],
+  [/^(2\. )?bundesliga 2|^2\. bundesliga/i, ["ger.2"], "2. Bundesliga"],
+  [/^bundesliga/i, ["ger.1"], "Bundesliga"],
+  [/^premier league/i, ["eng.1"], "Premier League"],
+  [/^championship/i, ["eng.2"], "Championship"],
+  [/^league one/i, ["eng.3"], "League One"],
+  [/^league two/i, ["eng.4"], "League Two"],
+  [/^(carabao cup|league cup)/i, ["eng.league_cup"], "Carabao Cup"],
+  [/^serie a/i, ["ita.1"], "Serie A"],
+  [/^serie b/i, ["ita.2"], "Serie B"],
+  [/^primeira liga/i, ["por.1"], "Primeira Liga"],
+  [/^s[uü]per lig/i, ["tur.1"], "Süper Lig"],
+  [/^(saudi pro league|pro league|liga profesional saud[ií])/i, ["ksa.1"], "Saudi Pro League"],
+  [/^brasileir[aã]o/i, ["bra.1"], "Brasileirão"],
+  [/^liga profesional( argentina)?$/i, ["arg.1"], "Liga Profesional"],
+  [/^liga betplay/i, ["col.1"], "Liga BetPlay"],
+  [/^primera a/i, ["col.1"], "Primera A"],
+  [/^liga mx$/i, ["mex.1"], "Liga MX"],
+  [/^liga de expansi[oó]n mx/i, ["mex.2"], "Liga de Expansión MX"],
+  [/^liga 1$/i, ["per.1"], "Liga 1"],
+  [/^liga chile$/i, ["chi.1"], "Liga Chile"],
+  [/^liga paraguay$/i, ["par.1"], "Liga Paraguay"],
+  [/^primera divisi[oó]n$/i, ["chi.1", "bol.1", "crc.1"], "Primera División"],
+  [/^eredivisie$/i, ["ned.1"], "Eredivisie"],
+  [/^mls$/i, ["usa.1"], "MLS"],
+  [/messi cup|u1[5-9]|u2[0-3]|\bsub\s?\d/i, null, ""],
+];
+
+const espnCache = Object.create(null);
+
+function espnLeagues(competition) {
+  const name = clean(competition).replace(/:\s*$/, "");
+  for (let i = 0; i < ESPN_LEAGUES.length; i++) {
+    const rule = ESPN_LEAGUES[i];
+    if (!rule[0].test(name)) continue;
+    if (!rule[1]) return null; // a competition this plugin does not show at all
+    return { slugs: rule[1], title: rule[2] };
+  }
+  return null;
+}
+
+function utcDay(ms) {
+  const d = new Date(ms);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return "" + y + m + day;
+}
+
+async function espnBoard(slug, date) {
+  const key = slug + "@" + date;
+  const hit = espnCache[key];
+  if (hit && Date.now() - hit.at < ESPN_CACHE_MS) return hit.events;
+
+  try {
+    const res = await kino.fetch(ESPN + slug + "/scoreboard?dates=" + date, {
+      headers: { "User-Agent": UA, Accept: "application/json" },
+    });
+    if (!res || !res.ok) return [];
+    const body = await res.json();
+    const events = (body && body.events) || [];
+    espnCache[key] = { at: Date.now(), events: events };
+    return events;
+  } catch (e) {
+    log("espn failed", slug, date, e && e.message);
+    return [];
+  }
+}
+
+function espnNames(event) {
+  const competition = (event.competitions && event.competitions[0]) || {};
+  const sides = competition.competitors || [];
+  let home = "";
+  let away = "";
+  let homeLogo = "";
+  let awayLogo = "";
+  for (let i = 0; i < sides.length; i++) {
+    const team = sides[i].team || {};
+    if (sides[i].homeAway === "home") {
+      home = team.displayName || team.name || "";
+      homeLogo = team.logo || (team.logos && team.logos[0] && team.logos[0].href) || "";
+    } else {
+      away = team.displayName || team.name || "";
+      awayLogo = team.logo || (team.logos && team.logos[0] && team.logos[0].href) || "";
+    }
+  }
+  const at = new Date(event.date).getTime();
+  return { id: String(event.id || ""), home: home, away: away, homeLogo: homeLogo, awayLogo: awayLogo, at: at };
+}
+
+// The ESPN fixture for a site event: same two clubs, kick-off close enough to be the same match.
+function espnFixtureFor(siteEvent, boardEvents) {
+  let best = null;
+  let bestDelta = Infinity;
+  for (let i = 0; i < boardEvents.length; i++) {
+    const fixture = espnNames(boardEvents[i]);
+    if (!fixture.home || !fixture.away || !fixture.at) continue;
+    const delta = Math.abs(fixture.at - siteEvent.at);
+    if (delta > 3 * 60 * 60 * 1000) continue;
+    const straight = sameSide(siteEvent.home, fixture.home) && sameSide(siteEvent.away, fixture.away);
+    const swapped = sameSide(siteEvent.home, fixture.away) && sameSide(siteEvent.away, fixture.home);
+    if (!straight && !swapped) continue;
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      best = fixture;
+    }
+  }
+  return best;
+}
+
+// Walk the agenda and keep only what ESPN confirms, with ESPN's clubs, time and crests.
+async function confirmFixtures(events, now) {
+  const groups = Object.create(null);
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
+    const league = espnLeagues(event.competition);
+    if (league === null) continue; // not shown at all (youth cups)
+    if (!league) continue; // a competition ESPN does not carry: leave the site's word
+    const key = league.slugs[0] + "|" + league.title;
+    if (!groups[key]) groups[key] = { slugs: league.slugs, title: league.title, events: [] };
+    groups[key].events.push(event);
+  }
+
+  const confirmedFor = Object.create(null); // site event -> fixture
+  const offline = Object.create(null); // leagues ESPN could not answer for
+
+  // every board this refresh needs, fetched in small parallel batches: six at a time is
+  // several times faster than one by one and still gentle with the feed
+  const wanted = Object.create(null);
+  for (const key in groups) {
+    const group = groups[key];
+    const dates = Object.create(null);
+    for (let i = 0; i < group.events.length; i++) {
+      const at = group.events[i].at;
+      const hour = new Date(at).getUTCHours();
+      dates[utcDay(at)] = true;
+      // ESPN files a game under its local date, which can be the day before or after in UTC
+      if (hour < 6) dates[utcDay(at - 86400000)] = true;
+      else if (hour >= 18) dates[utcDay(at + 86400000)] = true;
+    }
+    group.dates = Object.keys(dates);
+    for (let s = 0; s < group.slugs.length; s++) {
+      for (let d = 0; d < group.dates.length; d++) wanted[group.slugs[s] + "@" + group.dates[d]] = true;
+    }
+  }
+  const jobs = Object.keys(wanted).map(function (pair) {
+    const at = pair.lastIndexOf("@");
+    return [pair.slice(0, at), pair.slice(at + 1)];
+  });
+  for (let i = 0; i < jobs.length; i += 6) {
+    const batch = jobs.slice(i, i + 6).map(function (job) {
+      return espnBoard(job[0], job[1]);
+    });
+    await Promise.all(batch);
+  }
+
+  for (const key in groups) {
+    const group = groups[key];
+    const list = group.dates;
+    let left = group.events.length;
+    let answered = false;
+    for (let s = 0; s < group.slugs.length && left > 0; s++) {
+      const boards = [];
+      for (let d = 0; d < list.length; d++) {
+        const board = await espnBoard(group.slugs[s], list[d]);
+        if (board.length) answered = true;
+        for (let b = 0; b < board.length; b++) boards.push(board[b]);
+      }
+      if (!boards.length) continue;
+      for (let i = 0; i < group.events.length; i++) {
+        const event = group.events[i];
+        const key = "e" + event.at + event.teams;
+        if (confirmedFor[key]) continue;
+        const fixture = espnFixtureFor(event, boards);
+        if (!fixture) continue;
+        confirmedFor[key] = { event: event, fixture: fixture, title: group.title };
+        left--;
+      }
+    }
+    // ESPN unreachable for this league: keep the site's cards rather than empty the row
+    if (!answered) offline[group.title] = true;
+  }
+
+  const out = [];
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
+    const league = espnLeagues(event.competition);
+    if (league === null) continue; // youth and reserve cups
+    const confirmed = confirmedFor["e" + event.at + event.teams];
+    if (!confirmed) {
+      if (league && !offline[league.title]) continue; // ESPN has this league and not this match
+      out.push(event); // ESPN has no word on it: the site's card stands
+      continue;
+    }
+    out.push({
+      slug: event.slug,
+      competition: confirmed.title,
+      teams: confirmed.fixture.home + " vs " + confirmed.fixture.away,
+      home: confirmed.fixture.home,
+      away: confirmed.fixture.away,
+      at: confirmed.fixture.at,
+      sources: event.sources,
+      crest: confirmed.fixture.homeLogo,
+      espnId: confirmed.fixture.id,
+    });
+  }
+  void now;
+  return out;
+}
 // --- agenda parsing -------------------------------------------------------
 
 function parseAgenda(html, now) {
@@ -274,19 +499,29 @@ function parseAgenda(html, now) {
     events.push(makeEvent(slug, competition, teams, sides, at, sources));
   }
 
-  const unique = dedupeEvents(events);
-
-  unique.sort(function (a, b) {
+  events.sort(function (a, b) {
     if (a.at !== b.at) return a.at - b.at;
     return a.teams < b.teams ? -1 : a.teams > b.teams ? 1 : 0;
   });
-  return unique;
+  return events;
 }
 
 // The agenda repeats a fixture under two competition names (Pro League / Saudi Pro League,
 // Liga Chile / Primera División, "Sheffield Utd" / "Sheffield United"): one card survives,
 // the copy with more sources, or the one whose competition name is the fuller.
 function dedupeEvents(events) {
+  const byId = Object.create(null);
+  const unique = [];
+  for (let i = 0; i < events.length; i++) {
+    const id = events[i].espnId;
+    if (id) {
+      if (byId[id]) continue;
+      byId[id] = true;
+    }
+    unique.push(events[i]);
+  }
+  events = unique;
+
   const kept = [];
   for (let i = 0; i < events.length; i++) {
     const event = events[i];
@@ -378,7 +613,9 @@ async function agendaHtml() {
 }
 
 async function agendaEvents() {
-  return parseAgenda(await agendaHtml(), Date.now());
+  const parsed = parseAgenda(await agendaHtml(), Date.now());
+  const confirmed = await confirmFixtures(parsed, Date.now());
+  return dedupeEvents(confirmed);
 }
 
 async function channelList() {

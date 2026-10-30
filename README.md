@@ -35,9 +35,13 @@ hora, acá hay algo.
 (`15:00 · Le Havre vs PSG`) y `mañana` cuando el partido cae después de medianoche. Si lo
 abres antes de la hora, Kino te dice a qué hora empieza en vez de abrir una señal muerta.
 
-Cada partido lleva su carátula con los dos equipos sobre el color de la competición; cada canal
-lleva su logo. La búsqueda de En vivo encuentra equipos y canales por nombre, y la guía de TV
-muestra a qué hora empieza cada partido.
+Los horarios, los equipos y la competición salen de la agenda pública de **ESPN**, no de la
+página que emite la señal: un partido aparece solo si ESPN lo tiene, con la hora que ESPN le
+da y con los nombres de los dos clubes tal como los nombra ESPN. Las copas juveniles y de
+reserva quedan afuera, y también las entradas duplicadas o con un rival que no corresponde.
+
+Cada partido lleva el escudo del club local y cada canal lleva su logo. La búsqueda de En vivo
+encuentra equipos y canales por nombre, y la guía de TV muestra a qué hora empieza cada partido.
 
 ## Cuando una señal no anda
 
