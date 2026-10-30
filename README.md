@@ -39,23 +39,6 @@ Cada partido lleva su carátula con los dos equipos sobre el color de la competi
 lleva su logo. La búsqueda de En vivo encuentra equipos y canales por nombre, y la guía de TV
 muestra a qué hora empieza cada partido.
 
-## Los ESPN y Fox Sports vienen por país
-
-Un ESPN 2 de Argentina no es el ESPN 2 de México: son señales distintas, con relato y publicidad
-distintos. Por eso esos canales aparecen separados y con el país en el nombre:
-
-```
-ESPN 1 (Argentina)     ESPN 1 (México)
-ESPN 2 (Argentina)     ESPN 2 (México)
-ESPN 3 (Argentina)     ESPN 3 (México)
-Fox Sports 1 (Argentina)   Fox Sports 1 (México)
-Fox Sports 2 (Argentina)   Fox Sports 2 (México)
-Fox Sports 3 (Argentina)   Fox Sports 3 (México)
-```
-
-Lo que elegís es lo que ves: el plugin nunca te cambia una señal argentina por una mexicana sin
-avisarte. El resto de los canales va con su nombre a secas, porque no tiene esa ambigüedad.
-
 ## Cuando una señal no anda
 
 Cada canal tiene una o varias fuentes. El plugin las recorre en orden, saltea las que el propio
