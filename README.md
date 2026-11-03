@@ -70,6 +70,15 @@ Además, para dieciséis canales del directorio que suelen quedarse sin fuente �
 Fox Sports, TyC Sports, TNT Sports, DSports, Movistar Deportes, Sky Sports LaLiga, TUDN— el
 plugin guarda una señal de respaldo ya comprobada: si la del sitio no responde, el mismo canal
 se abre por ahí. En el peor caso se ve el mismo canal, no una pantalla negra.
+## Un acceso por emisora
+
+El mismo partido no se ve igual en todo el continente: un ESPN 2 de Argentina no es el ESPN 2 de
+México, y una misma fecha de Champions puede ir por ESPN, ESPN 3 o Fox Sports según el país. Por
+eso cada partido aparece **una vez por emisora** que lo transmite, con el nombre del canal:
+`Galatasaray vs Stuttgart · ESPN 5`, `Shakhtar vs Sporting CP · ESPN`. Elegís el de tu país y ese
+se abre; los demás quedan como respaldo. Se apaga en Configurar si preferís una sola tarjeta por
+partido.
+
 ## Los dos escudos
 
 En la grilla de En vivo, Kino acepta una sola imagen por canal, así que por defecto el partido

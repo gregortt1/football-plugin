@@ -550,11 +550,15 @@ function parseAgenda(html, now) {
     if (!slug) continue;
 
     const sources = [];
-    const srcRe = /href="\/match\/([^"#?]+)#source=(\d+)"/g;
+    const labels = [];
+    const srcRe = /href="\/match\/([^"#?]+)#source=(\d+)">\s*<span>[^<]*<\/span>\s*<small>([^<]*)<\/small>/g;
     let m;
     while ((m = srcRe.exec(chunk))) {
       if (m[1] !== slug) continue;
-      if (sources.indexOf(m[2]) === -1) sources.push(m[2]);
+      if (sources.indexOf(m[2]) !== -1) continue;
+      sources.push(m[2]);
+      const label = clean(m[3]);
+      if (label && labels.indexOf(label) === -1) labels.push(label);
     }
     if (!sources.length) continue;
 
@@ -579,7 +583,9 @@ function parseAgenda(html, now) {
     if (at > now + AHEAD_MS) continue;
 
     const sides = splitTeams(teams);
-    events.push(makeEvent(slug, competition, teams, sides, at, sources));
+    const event = makeEvent(slug, competition, teams, sides, at, sources);
+    event.labels = labels;
+    events.push(event);
   }
 
   events.sort(function (a, b) {
@@ -863,6 +869,61 @@ function matchChannel(event, categoryId, now) {
   };
 }
 
+// The same match, one card per broadcaster: "Galatasaray vs Stuttgart · ESPN 5" plays ESPN 5
+// and nothing else, which is how a person picks the feed of their own country.
+function matchChannels(event, categoryId, now) {
+  const many = onePerBroadcaster();
+  const labels = (event.labels || []).slice(0, 6);
+  if (!many || labels.length < 2) return [matchChannel(event, categoryId, now)];
+
+  const upcoming = event.at > now + EARLY_MS;
+  let prefix = "";
+  if (upcoming) {
+    const day = dayLabel(event.at, now);
+    prefix = (day ? day + " " : "") + clockText(event.at) + " · ";
+  }
+
+  const out = [];
+  const seen = Object.create(null);
+  for (let i = 0; i < labels.length && out.length < 4; i++) {
+    // "Fox Deportes · Español" and "Fox Deportes" are one card, not two
+    const label = labels[i].replace(/\s*·\s*(espa[ñn]ol|portugu[eê]s|ingl[eé]s)\s*$/i, "").trim();
+    const key = plain(label);
+    if (!key || seen[key]) continue;
+    seen[key] = true;
+    out.push({
+      id: "m-" + event.slug + "-" + out.length,
+      title: (prefix + event.teams + " · " + label).slice(0, 300),
+      categoryId: categoryId,
+      ref: "m~" + event.slug + "~" + event.at + "~" + pinSource(event, labels[i]),
+      logo: matchLogo(event),
+    });
+  }
+  if (!out.length) out.push(matchChannel(event, categoryId, now));
+  return out;
+}
+
+// Which source id carries that broadcaster; the rest of the match's sources stay as backups.
+function pinSource(event, label) {
+  const ids = event.sources || [];
+  if (!ids.length) return "";
+  const index = (event.labels || []).indexOf(label);
+  if (index <= 0) return ids.join(".");
+  const first = event.sourceIds && event.sourceIds[label];
+  const pinned = first || ids[Math.min(index, ids.length - 1)];
+  const rest = [];
+  for (let i = 0; i < ids.length; i++) if (ids[i] !== pinned) rest.push(ids[i]);
+  return [pinned].concat(rest).join(".");
+}
+
+function onePerBroadcaster() {
+  try {
+    return String(kino.config.get("onePerBroadcaster") || "on") !== "off";
+  } catch (e) {
+    return true;
+  }
+}
+
 // Streams known to answer for channels the directory already lists: when the site's sources
 // are down, the same channel plays from here. Names are the plugin's own channel names.
 const STREAM_BACKUP = {
@@ -1045,9 +1106,11 @@ export async function liveChannels(arg) {
     return { items: [] };
   }
 
-  const all = selected.map(function (event) {
-    return matchChannel(event, categoryId, now);
-  });
+  const all = [];
+  for (let i = 0; i < selected.length; i++) {
+    const cards = matchChannels(selected[i], categoryId, now);
+    for (let c = 0; c < cards.length; c++) all.push(cards[c]);
+  }
   return pageOf(all, cursor, MATCH_PAGE);
 }
 
@@ -1324,6 +1387,19 @@ async function resolveMatch(payload) {
   }
   if (!sources.length && ids.length) {
     for (let i = 0; i < ids.length; i++) sources.push({ id: ids[i], name: "" });
+  }
+
+  // A ref that carries a source first is a card of that broadcaster: it gets its own turn
+  // before the rest, so the person who picked ESPN gets ESPN and not ESPN AR.
+  const pinned = ids.length ? String(ids[0]) : "";
+  if (pinned) {
+    let hit = null;
+    try {
+      hit = await eventFromSource(slug, pinned, false);
+    } catch (e) {
+      log("pinned source failed", pinned, e && e.message);
+    }
+    if (hit) return hit;
   }
 
   // Every source of the match is asked at the same time: one that hangs no longer costs the
