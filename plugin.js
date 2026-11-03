@@ -49,7 +49,7 @@ const CHANNELS_CACHE_MS = 300000;
 const STREAM_CACHE_MS = 120000;
 const MATCH_PAGE = 300;
 const CHANNEL_PAGE = 300;
-const MAX_SOURCES = 3;
+const MAX_SOURCES = 8;
 const MAX_SERVERS = 3;
 
 // A football match runs up to two hours with half time and stoppage time.
@@ -387,8 +387,27 @@ function espnNames(event) {
       awayLogo = team.logo || (team.logos && team.logos[0] && team.logos[0].href) || "";
     }
   }
+  const status = (event.status && event.status.type) || {};
   const at = new Date(event.date).getTime();
-  return { id: String(event.id || ""), home: home, away: away, homeLogo: homeLogo, awayLogo: awayLogo, at: at };
+  return {
+    id: String(event.id || ""),
+    home: home,
+    away: away,
+    homeLogo: homeLogo,
+    awayLogo: awayLogo,
+    at: at,
+    state: String(status.state || ""),
+    detail: String(status.detail || status.description || ""),
+  };
+}
+
+// A postponed or cancelled match is not a channel: ESPN still lists it, with the reason.
+const NOT_PLAYED = /postponed|cancel|suspend|abandon|aplaz|suspenden/i;
+
+function playable(fixture) {
+  if (NOT_PLAYED.test(fixture.detail)) return false;
+  if (fixture.state === "post") return false; // already over
+  return true;
 }
 
 // The ESPN fixture for a site event: same two clubs, kick-off close enough to be the same match.
@@ -398,6 +417,7 @@ function espnFixtureFor(siteEvent, boardEvents) {
   for (let i = 0; i < boardEvents.length; i++) {
     const fixture = espnNames(boardEvents[i]);
     if (!fixture.home || !fixture.away || !fixture.at) continue;
+    if (!playable(fixture)) continue;
     const delta = Math.abs(fixture.at - siteEvent.at);
     if (delta > 3 * 60 * 60 * 1000) continue;
     const straight = sameSide(siteEvent.home, fixture.home) && sameSide(siteEvent.away, fixture.away);
@@ -1273,6 +1293,7 @@ async function eventFromSource(slug, sourceId) {
 
   const answer = await getJson(url);
   if (!answer || !answer.url) return null;
+  if (String(answer.health || "") === "failed") return null; // the site says this source is down
   return streamFromRelay(String(answer.url));
 }
 

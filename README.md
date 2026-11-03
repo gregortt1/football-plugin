@@ -49,7 +49,8 @@ Ecuador, Venezuela y Bolivia.
 Solo primera división: Championship, LaLiga 2, Serie B, 2. Bundesliga, Ligue 2, Série B y la
 Liga de Expansión MX quedan afuera, igual que las ligas juveniles y de reserva. Las copas que ESPN no publica —Copa Argentina, Copa do Brasil,
 Copa Colombia, Copa Chile— siguen apareciendo con los datos del sitio, porque no hay contra qué
-cotejarlas.
+cotejarlas. Un partido que ESPN marca aplazado, suspendido o cancelado no se muestra, aunque el
+sitio todavía lo tenga en la agenda.
 
 Cada partido lleva el escudo del club local y cada canal lleva su logo. La búsqueda de En vivo
 encuentra equipos y canales por nombre, y la guía de TV muestra a qué hora empieza cada partido.
