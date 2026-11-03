@@ -315,7 +315,7 @@ const ESPN_LEAGUES = [
   [/^liga auf|^primera divisi[oó]n uruguaya/i, ["uru.1"], "Liga AUF"],
   [/^liga pro|^liga ecuador/i, ["ecu.1"], "LigaPro"],
   [/^liga venezolana|^liga futve/i, ["ven.1"], "Liga FUTVE"],
-  [/^primera divisi[oó]n$/i, ["chi.1", "bol.1", "crc.1"], "Primera División"],
+  [/^primera divisi[oó]n$/i, ["chi.1", "par.1", "bol.1", "uru.1", "crc.1"], "Primera División"],
   // Otras
   [/^primeira liga/i, ["por.1"], "Primeira Liga"],
   [/^s[uü]per lig/i, ["tur.1"], "Süper Lig"],
@@ -442,9 +442,9 @@ async function confirmFixtures(events, now) {
       else if (hour >= 18) dates[utcDay(at + 86400000)] = true;
     }
     group.dates = Object.keys(dates);
-    for (let s = 0; s < group.slugs.length; s++) {
-      for (let d = 0; d < group.dates.length; d++) wanted[group.slugs[s] + "@" + group.dates[d]] = true;
-    }
+    // only the first league of a group is fetched up front: the rest are asked for in turn,
+    // and only when the first one did not settle every match of that competition
+    for (let d = 0; d < group.dates.length; d++) wanted[group.slugs[0] + "@" + group.dates[d]] = true;
   }
   const jobs = Object.keys(wanted).map(function (pair) {
     const at = pair.lastIndexOf("@");
@@ -766,7 +766,8 @@ function matchChannel(event, categoryId, now) {
 // Streams known to answer for channels the directory already lists: when the site's sources
 // are down, the same channel plays from here. Names are the plugin's own channel names.
 const STREAM_BACKUP = {
-  "Sky Sports LaLiga": "http://190.61.101.11:7050/play/a04g/index.m3u8?hls",
+  "ESPN 2": "http://190.108.83.69:8000/play/a0an/index.m3u8",
+  "ESPN 3": "http://190.108.83.69:8000/play/a039/index.m3u8",  "Sky Sports LaLiga": "http://190.61.101.11:7050/play/a04g/index.m3u8?hls",
   "TUDN": "http://181.119.177.253:8000/play/a0ds/index.m3u8",
   "TyC Sports": "http://45.186.254.75:8000/play/a08n/index.m3u8",
   "TNT Sports": "http://181.79.87.131:8000/play/a0e0/index.m3u8",
@@ -797,6 +798,7 @@ const EXTRA_STREAMS = [
   { name: "AS3 Sport TV (Venezuela)", logo: "https://i.ibb.co/bRmGbsyV/A3-SPORTTV.jpg", url: "https://streamtv.as3sport.online:3394/hybrid/play.m3u8" },
   { name: "FIFA+ (Latinoamérica)", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/FIFA%2B_(2025).svg/960px-FIFA%2B_(2025).svg.png", url: "https://6c849fb3.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/TEctbXhfRklGQVBsdXNTcGFuaXNoLTFfSExT/playlist.m3u8" },
   { name: "Real Madrid TV", logo: "https://i.imgur.com/5pMo7dL.png", url: "https://rmtv.akamaized.net/hls/live/2043153/rmtv-es-web/master.m3u8" },
+  { name: "TNT Sports Premium (Chile)", logo: "", url: "http://190.108.83.69:8000/play/a03i/index.m3u8" },
   { name: "beIN SPORTS XTRA en Español", logo: "https://i.imgur.com/V562tpO.png", url: "https://dc1644a9jazgj.cloudfront.net/beIN_Sports_Xtra_Espanol.m3u8" },
   { name: "Tigo Sports+ (Paraguay)", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Tigo_Sports_2025.png/960px-Tigo_Sports_2025.png", url: "http://45.170.130.224:8000/play/a04i/index.m3u8" },
   { name: "Teledeporte (España)", logo: "https://graph.facebook.com/teledeporteRTVE/picture?width=200&height=200", url: "https://stream.ads.ottera.tv/playlist.m3u8?network_id=15601" },
