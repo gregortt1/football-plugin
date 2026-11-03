@@ -88,6 +88,10 @@ sitio ya marca como caídas, y antes de darte una señal comprueba que el manifi
 **y** que el primer fragmento de video exista. Si ninguna responde, Kino te avisa en vez de
 dejarte mirando una pantalla negra.
 
+Las fuentes de un partido se piden todas a la vez y gana la primera que realmente emite, así
+una que no responde no hace esperar a las demás; y toda la resolución tiene un tope de tiempo,
+porque Kino corta la llamada a los veinte segundos.
+
 Igual pasa: estas señales son de terceros y se caen sin aviso. Si un canal no abre, probá otro
 rato o abrí otro canal; no es algo que el plugin pueda arreglar desde acá.
 

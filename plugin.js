@@ -49,7 +49,7 @@ const CHANNELS_CACHE_MS = 300000;
 const STREAM_CACHE_MS = 120000;
 const MATCH_PAGE = 300;
 const CHANNEL_PAGE = 300;
-const MAX_SOURCES = 8;
+const MAX_SOURCES = 6;
 const MAX_SERVERS = 3;
 
 // A football match runs up to two hours with half time and stoppage time.
@@ -714,17 +714,42 @@ async function channelList() {
 
 // --- network helpers ------------------------------------------------------
 
+// Kino drops the call at 20 s; every request inside resolve gets what is left of this budget,
+// so a relay that never answers cannot swallow the whole attempt.
+const RESOLVE_BUDGET_MS = 12000;
+// One source never gets more than this: a relay that hangs must not eat the whole attempt.
+const SOURCE_BUDGET_MS = 3000;
+let resolveDeadline = 0;
+
+function startBudget() {
+  resolveDeadline = Date.now() + RESOLVE_BUDGET_MS;
+}
+
+function remainingMs() {
+  return resolveDeadline ? resolveDeadline - Date.now() : RESOLVE_BUDGET_MS;
+}
+
+function budgetTimeout(most) {
+  const left = remainingMs();
+  if (left <= 0) return 2000;
+  return Math.max(2000, Math.min(most, left));
+}
+
 async function getText(url) {
+  if (remainingMs() <= 0) throw new Error("out of time");
   const res = await kino.fetch(url, {
     headers: { "User-Agent": UA, Referer: SITE + "/" },
+    timeoutMs: budgetTimeout(8000),
   });
   if (!res || !res.ok) throw new Error("HTTP " + (res ? res.status : "?"));
   return await res.text();
 }
 
 async function getJson(url) {
+  if (remainingMs() <= 0) throw new Error("out of time");
   const res = await kino.fetch(url, {
     headers: { "User-Agent": UA, Accept: "application/json", Referer: SITE + "/" },
+    timeoutMs: budgetTimeout(6000),
   });
   if (!res || !res.ok) throw new Error("HTTP " + (res ? res.status : "?"));
   return await res.json();
@@ -1049,6 +1074,7 @@ export async function resolve(ref) {
   const cached = resolveCache[key];
   if (cached && Date.now() - cached.at < STREAM_CACHE_MS) return cached.stream;
 
+  startBudget();
   let stream = null;
   if (key.indexOf("c~") === 0) stream = await resolveChannel(key.slice(2));
   else if (key.indexOf("f~") === 0) stream = await resolveFeed(key.slice(2));
@@ -1076,6 +1102,10 @@ async function resolveChannel(slug) {
   let dead = 0;
 
   for (let i = 0; i < servers.length && i < MAX_SERVERS; i++) {
+    if (remainingMs() < 2500) {
+      log("out of time for channel", slug, "after", i, "servers");
+      break;
+    }
     try {
       const answer = await channelFromServer(slug, servers[i]);
       if (!answer) continue;
@@ -1209,16 +1239,40 @@ async function resolveMatch(payload) {
     for (let i = 0; i < ids.length; i++) sources.push({ id: ids[i], name: "" });
   }
 
-  let attempts = 0;
-  for (let i = 0; i < sources.length && attempts < MAX_SOURCES; i++) {
-    attempts++;
-    try {
-      const stream = await eventFromSource(slug, sources[i].id);
-      if (stream) return stream;
-    } catch (e) {
-      log("match source failed", sources[i].id, e && e.message);
-    }
+  // Every source of the match is asked at the same time: one that hangs no longer costs the
+  // others their turn, and the first that really emits wins.
+  const tries = [];
+  const count = Math.min(sources.length, MAX_SOURCES);
+  for (let i = 0; i < count; i++) {
+    tries.push(
+      eventFromSource(slug, sources[i].id, false).catch(function (e) {
+        log("match source failed", sources[i].id, e && e.message);
+        return null;
+      })
+    );
   }
+  if (!tries.length) return null;
+
+  // The first answer wins: waiting for the slow ones would only add their hang to the call.
+  const winner = await new Promise(function (resolve) {
+    let open = tries.length;
+    let settled = false;
+    for (let i = 0; i < tries.length; i++) {
+      tries[i].then(function (stream) {
+        open--;
+        if (settled) return;
+        if (stream) {
+          settled = true;
+          resolve(stream);
+        } else if (!open) {
+          settled = true;
+          resolve(null);
+        }
+      });
+    }
+  });
+  if (winner) return winner;
+  if (remainingMs() < 2500) log("out of time for match", slug, "after", count, "sources");
 
   // Every source of this match is dead: play the channel that carries it, when we know it.
   return await streamFromBroadcast(sources);
@@ -1282,7 +1336,7 @@ function parseSources(html) {
   return out.slice(0, 8);
 }
 
-async function eventFromSource(slug, sourceId) {
+async function eventFromSource(slug, sourceId, deep) {
   const url =
     PLAYBACK_URL +
     "?type=event&slug=" +
@@ -1294,19 +1348,19 @@ async function eventFromSource(slug, sourceId) {
   const answer = await getJson(url);
   if (!answer || !answer.url) return null;
   if (String(answer.health || "") === "failed") return null; // the site says this source is down
-  return streamFromRelay(String(answer.url));
+  return streamFromRelay(String(answer.url), deep);
 }
 
 // --- relay pages ----------------------------------------------------------
 
 // Every relay (tvf90, streamxhd, la18hd) wraps the same thing: a page that holds
 // playbackURL, sometimes behind one iframe, sometimes split into base64 pieces.
-async function streamFromRelay(url) {
+async function streamFromRelay(url, deep) {
   const playlist = await playlistAt(url);
   if (!playlist) return null;
 
   const streamUrl = normalise(playlist);
-  if (!streamUrl || !(await alive(streamUrl))) return null;
+  if (!streamUrl || !(await alive(streamUrl, deep))) return null;
 
   return { url: streamUrl, mime: "application/x-mpegURL" };
 }
@@ -1315,7 +1369,7 @@ async function streamFromRelay(url) {
 // and touch the first segment before promising it. A manifest that answers is not a stream.
 const PROBE_BYTES = 65536;
 
-async function alive(url) {
+async function alive(url, deep) {
   try {
     const manifest = await fetchCap(url);
     if (!manifest) return false;
@@ -1324,8 +1378,13 @@ async function alive(url) {
     let base = url;
     if (text.indexOf("#EXTM3U") !== 0) return false;
 
+    const isMaster = text.indexOf("#EXT-X-STREAM-INF") !== -1;
+    // a live match does not pay for the deep walk: a master that answers is a signal, and the
+    // player fetches its variants itself
+    if (deep === false) return !(text.indexOf("#EXT-X-ENDLIST") !== -1 && !isMaster);
+
     // a master playlist names its variants: one of them is the video
-    if (text.indexOf("#EXT-X-STREAM-INF") !== -1) {
+    if (isMaster) {
       const variant = firstUri(text, base, true);
       if (!variant) return false;
       const child = await fetchCap(variant);
@@ -1351,7 +1410,12 @@ async function alive(url) {
 
 async function fetchCap(url) {
   try {
-    const res = await kino.fetch(url, { headers: { "User-Agent": UA }, maxBytes: PROBE_BYTES });
+    if (remainingMs() <= 0) return null;
+    const res = await kino.fetch(url, {
+      headers: { "User-Agent": UA },
+      maxBytes: PROBE_BYTES,
+      timeoutMs: budgetTimeout(6000),
+    });
     if (!res || !res.ok) return null;
     return { text: await res.text(), status: res.status };
   } catch (e) {
