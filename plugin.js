@@ -1098,37 +1098,57 @@ export async function resolve(ref) {
 // are mirrors of the same feed, so walking them in order is safe: the same channel stays the
 // same channel, only the road changes.
 async function resolveChannel(slug) {
-  const servers = await channelServers(slug);
-  let dead = 0;
+  const servers = (await channelServers(slug)).slice(0, MAX_SERVERS);
 
-  for (let i = 0; i < servers.length && i < MAX_SERVERS; i++) {
-    if (remainingMs() < 2500) {
-      log("out of time for channel", slug, "after", i, "servers");
-      break;
-    }
-    try {
-      const answer = await channelFromServer(slug, servers[i]);
-      if (!answer) continue;
-      if (answer.health === "failed") {
-        dead++;
-        continue;
-      }
-      if (!answer.url) continue;
-      const stream = await streamFromRelay(answer.url);
-      if (stream) return stream;
-    } catch (e) {
-      log("channel source failed", slug, servers[i], e && e.message);
-    }
-  }
-  log("channel exhausted", slug, "dead sources:", dead);
+  // the mirrors of one channel are asked at the same time, same as a match's sources
+  const tries = servers.map(function (server) {
+    return channelFromServer(slug, server)
+      .then(function (answer) {
+        if (!answer || !answer.url) return null;
+        if (answer.health === "failed") return null;
+        return streamFromRelay(answer.url);
+      })
+      .catch(function (e) {
+        log("channel source failed", slug, server, e && e.message);
+        return null;
+      });
+  });
 
-  // the same channel, from a stream that answered a few minutes ago
+  // The site's mirrors get a few seconds and no more: a relay that hangs must not eat the
+  // whole budget when a known stream of the same channel is one line away.
+  const full = resolveDeadline;
+  resolveDeadline = Math.min(full, Date.now() + 4500);
+
+  const winner = await new Promise(function (resolve) {
+    if (!tries.length) return resolve(null);
+    let open = tries.length;
+    let settled = false;
+    for (let i = 0; i < tries.length; i++) {
+      tries[i].then(function (stream) {
+        open--;
+        if (settled) return;
+        if (stream) {
+          settled = true;
+          resolve(stream);
+        } else if (!open) {
+          settled = true;
+          resolve(null);
+        }
+      });
+    }
+  });
+  resolveDeadline = full;
+  if (winner) return winner;
+
+  // the same channel, from a stream that answered when it was harvested: plain http cannot be
+  // fetched by a plugin, so it goes straight to the player
   const name = await channelName(slug);
   if (name && STREAM_BACKUP[name]) {
     log("channel backup", name);
     return { url: STREAM_BACKUP[name], mime: "application/x-mpegURL" };
   }
 
+  log("channel exhausted", slug);
   markDead("c-" + slug);
   return null;
 }
@@ -1360,18 +1380,64 @@ async function streamFromRelay(url, deep) {
   if (!playlist) return null;
 
   const streamUrl = normalise(playlist);
-  if (!streamUrl || !(await alive(streamUrl, deep))) return null;
+  if (!streamUrl) return null;
 
-  return { url: streamUrl, mime: "application/x-mpegURL" };
+  const nodes = ftllyNodes(streamUrl);
+  const found = nodes.length > 1 ? await firstAlive(nodes, deep, 4000) : (await alive(streamUrl, deep)) ? streamUrl : null;
+  if (!found) return null;
+
+  return { url: found, mime: "application/x-mpegURL" };
+}
+
+// 4.ftlly.com and 10.ftlly.com sometimes take eleven seconds to say 404 for a stream their
+// siblings serve at once: the token is not tied to the node, so any node will do.
+function ftllyNodes(url) {
+  try {
+    const parsed = new URL(url);
+    const match = /^(\d+)\.ftlly\.com$/i.exec(parsed.hostname);
+    if (!match) return [url];
+    const out = [];
+    const order = [parsed.hostname.split(".")[0], "3", "8", "2", "6", "5", "7"];
+    for (let i = 0; i < order.length; i++) {
+      const host = order[i] + ".ftlly.com";
+      if (out.indexOf("https://" + host + parsed.pathname + parsed.search) !== -1) continue;
+      if (out.length >= 5) break;
+      out.push("https://" + host + parsed.pathname + parsed.search);
+    }
+    return out;
+  } catch (e) {
+    return [url];
+  }
+}
+
+async function firstAlive(urls, deep, cap) {
+  return await new Promise(function (resolve) {
+    let open = urls.length;
+    let settled = false;
+    for (let i = 0; i < urls.length; i++) {
+      const url = urls[i];
+      alive(url, deep, cap).then(function (ok) {
+        open--;
+        if (settled) return;
+        if (ok) {
+          settled = true;
+          resolve(url);
+        } else if (!open) {
+          settled = true;
+          resolve(null);
+        }
+      });
+    }
+  });
 }
 
 // A relay happily hands out a playlist for a channel that is off: read it, walk to a variant
 // and touch the first segment before promising it. A manifest that answers is not a stream.
 const PROBE_BYTES = 65536;
 
-async function alive(url, deep) {
+async function alive(url, deep, cap) {
   try {
-    const manifest = await fetchCap(url);
+    const manifest = await fetchCap(url, cap);
     if (!manifest) return false;
 
     let text = manifest.text;
@@ -1408,13 +1474,13 @@ async function alive(url, deep) {
   }
 }
 
-async function fetchCap(url) {
+async function fetchCap(url, cap) {
   try {
     if (remainingMs() <= 0) return null;
     const res = await kino.fetch(url, {
       headers: { "User-Agent": UA },
       maxBytes: PROBE_BYTES,
-      timeoutMs: budgetTimeout(6000),
+      timeoutMs: budgetTimeout(cap || 6000),
     });
     if (!res || !res.ok) return null;
     return { text: await res.text(), status: res.status };
