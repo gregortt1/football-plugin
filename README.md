@@ -44,7 +44,10 @@ Las cinco grandes de Europa —Premier League, LaLiga, Serie A, Bundesliga y Lig
 copas (FA Cup, Carabao, Copa del Rey, Coppa Italia, DFB Pokal, Coupe de France), la Champions,
 la Europa y la Conference, y del otro lado la Libertadores, la Sudamericana, la Recopa, la Liga
 MX, la Liga Profesional, el Brasileirão y las ligas de Colombia, Chile, Perú, Paraguay, Uruguay,
-Ecuador, Venezuela y Bolivia. Las copas que ESPN no publica —Copa Argentina, Copa do Brasil,
+Ecuador, Venezuela y Bolivia.
+
+Solo primera división: Championship, LaLiga 2, Serie B, 2. Bundesliga, Ligue 2, Série B y la
+Liga de Expansión MX quedan afuera, igual que las ligas juveniles y de reserva. Las copas que ESPN no publica —Copa Argentina, Copa do Brasil,
 Copa Colombia, Copa Chile— siguen apareciendo con los datos del sitio, porque no hay contra qué
 cotejarlas.
 
@@ -61,6 +64,11 @@ conocida, así que Kino los abre sin pasar por el sitio.
 
 Son señales de terceros: algunas están geobloqueadas fuera de su país y otras se caen sin aviso.
 Antes de agregar una se comprobó que estuviera emitiendo, pero eso no lo garantiza para mañana.
+
+Además, para catorce canales del directorio que suelen quedarse sin fuente —ESPN y sus señales,
+Fox Sports, TyC Sports, TNT Sports, DSports, Movistar Deportes, Sky Sports LaLiga, TUDN— el
+plugin guarda una señal de respaldo ya comprobada: si la del sitio no responde, el mismo canal
+se abre por ahí. En el peor caso se ve el mismo canal, no una pantalla negra.
 ## Los dos escudos
 
 En la grilla de En vivo, Kino acepta una sola imagen por canal, así que por defecto el partido

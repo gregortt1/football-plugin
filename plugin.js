@@ -268,27 +268,27 @@ const ESPN_CACHE_MS = 10 * 60 * 1000;
 const ESPN_LEAGUES = [
   // Inglaterra y sus copas
   [/^premier league/i, ["eng.1"], "Premier League"],
-  [/^championship/i, ["eng.2"], "Championship"],
-  [/^league one/i, ["eng.3"], "League One"],
-  [/^league two/i, ["eng.4"], "League Two"],
+  [/^championship/i, null, ""],                 // segunda división: no se muestra
+  [/^league one/i, null, ""],
+  [/^league two/i, null, ""],
   [/^(carabao cup|league cup|efl cup)/i, ["eng.league_cup"], "Carabao Cup"],
   [/^fa cup/i, ["eng.fa"], "FA Cup"],
-  [/^efl trophy/i, ["eng.trophy"], "EFL Trophy"],
+  [/^efl trophy/i, null, ""],
   // España
-  [/^laliga (smartbank|2)|^segunda divisi[oó]n/i, ["esp.2"], "LaLiga 2"],
+  [/^laliga (smartbank|2)|^segunda divisi[oó]n/i, null, ""],
   [/^laliga/i, ["esp.1"], "LaLiga"],
   [/^copa del rey/i, ["esp.copa_del_rey"], "Copa del Rey"],
   // Italia
   [/^serie a/i, ["ita.1"], "Serie A"],
-  [/^serie b/i, ["ita.2"], "Serie B"],
+  [/^serie b/i, null, ""],
   [/^coppa italia/i, ["ita.coppa_italia"], "Coppa Italia"],
   // Alemania
-  [/^(2\. )?bundesliga 2|^2\. bundesliga/i, ["ger.2"], "2. Bundesliga"],
+  [/^(2\. )?bundesliga 2|^2\. bundesliga/i, null, ""],
   [/^bundesliga/i, ["ger.1"], "Bundesliga"],
   [/^dfb[- ]?pokal/i, ["ger.dfb_pokal"], "DFB Pokal"],
   // Francia
   [/^ligue 1/i, ["fra.1"], "Ligue 1"],
-  [/^ligue 2/i, ["fra.2"], "Ligue 2"],
+  [/^ligue 2/i, null, ""],
   [/^coupe de france/i, ["fra.coupe_de_france"], "Coupe de France"],
   [/^troph[eé]e des champions/i, ["fra.super_cup"], "Trophée des Champions"],
   // Europa
@@ -302,9 +302,9 @@ const ESPN_LEAGUES = [
   // Argentina, Brasil, México
   [/^liga profesional( argentina)?$/i, ["arg.1"], "Liga Profesional"],
   [/^brasileir[aã]o/i, ["bra.1"], "Brasileirão"],
-  [/^s[eé]rie b/i, ["bra.2"], "Série B"],
+  [/^s[eé]rie b/i, null, ""],
   [/^liga mx$/i, ["mex.1"], "Liga MX"],
-  [/^liga de expansi[oó]n mx/i, ["mex.2"], "Liga de Expansión MX"],
+  [/^liga de expansi[oó]n mx/i, null, ""],
   [/^copa mx/i, ["mex.copa_mx"], "Copa MX"],
   // Colombia, Chile, Perú, Paraguay, Uruguay, Ecuador, Venezuela, Bolivia
   [/^liga betplay/i, ["col.1"], "Liga BetPlay"],
@@ -322,7 +322,10 @@ const ESPN_LEAGUES = [
   [/^(saudi pro league|pro league|liga profesional saud[ií])/i, ["ksa.1"], "Saudi Pro League"],
   [/^eredivisie$/i, ["ned.1"], "Eredivisie"],
   [/^mls$/i, ["usa.1"], "MLS"],
-  // lo que este plugin no muestra
+  [/^primera b/i, null, ""],
+  [/^segunda divisi[oó]n/i, null, ""],
+  [/reserve league/i, null, ""],
+  [/youth league/i, null, ""],  // lo que este plugin no muestra
   [/messi cup|u1[5-9]|u2[0-3]|\bsub\s?\d/i, null, ""],
 ];
 
@@ -760,6 +763,25 @@ function matchChannel(event, categoryId, now) {
   };
 }
 
+// Streams known to answer for channels the directory already lists: when the site's sources
+// are down, the same channel plays from here. Names are the plugin's own channel names.
+const STREAM_BACKUP = {
+  "Sky Sports LaLiga": "http://190.61.101.11:7050/play/a04g/index.m3u8?hls",
+  "TUDN": "http://181.119.177.253:8000/play/a0ds/index.m3u8",
+  "TyC Sports": "http://45.186.254.75:8000/play/a08n/index.m3u8",
+  "TNT Sports": "http://181.79.87.131:8000/play/a0e0/index.m3u8",
+  "DSports 2": "http://201.240.104.137:8000/play/dtv2/index.m3u8",
+  "DSports": "http://190.117.20.37:8000/play/a08d/index.m3u",
+  "Fox Sports": "http://190.61.101.11:7050/play/a08t/index.m3u8?hls",
+  "Movistar Deportes": "http://190.108.83.69:8000/play/a07o/index.m3u8",
+  "ESPN": "http://190.61.101.11:7050/play/a09k/index.m3u8?hls",
+  "ESPN 4": "http://190.61.101.11:7050/play/a08p/index.m3u8?hls",
+  "ESPN 5": "http://190.61.101.11:7050/play/a06j/index.m3u8?hls",
+  "ESPN 6": "http://190.61.101.11:7050/play/a05e/index.m3u8?hls",
+  "ESPN Premium": "http://205.235.6.29:8000/play/a0wl/index.m3u8?hls",
+  "ESPN 7": "http://205.235.6.29:8000/play/a0zv/index.m3u8?hls",
+};
+
 // Channels the stream site does not carry, from the public iptv-org lists: Latin sports
 // channels that answer today. They come with their stream already known, so Kino plays them
 // without asking the site for a source.
@@ -776,6 +798,14 @@ const EXTRA_STREAMS = [
   { name: "FIFA+ (Latinoamérica)", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/FIFA%2B_(2025).svg/960px-FIFA%2B_(2025).svg.png", url: "https://6c849fb3.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/TEctbXhfRklGQVBsdXNTcGFuaXNoLTFfSExT/playlist.m3u8" },
   { name: "Real Madrid TV", logo: "https://i.imgur.com/5pMo7dL.png", url: "https://rmtv.akamaized.net/hls/live/2043153/rmtv-es-web/master.m3u8" },
   { name: "beIN SPORTS XTRA en Español", logo: "https://i.imgur.com/V562tpO.png", url: "https://dc1644a9jazgj.cloudfront.net/beIN_Sports_Xtra_Espanol.m3u8" },
+  { name: "Tigo Sports+ (Paraguay)", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Tigo_Sports_2025.png/960px-Tigo_Sports_2025.png", url: "http://45.170.130.224:8000/play/a04i/index.m3u8" },
+  { name: "Teledeporte (España)", logo: "https://graph.facebook.com/teledeporteRTVE/picture?width=200&height=200", url: "https://stream.ads.ottera.tv/playlist.m3u8?network_id=15601" },
+  { name: "Claro Sports", logo: "https://pbs.twimg.com/profile_images/412626363011457024/s87vGCpO_400x400.jpeg", url: "http://45.182.22.53:8000/play/a0c2/index.m3u8?fbclid=Iwb21leAUpZV5jbGNrBSllUmV4dG4DYWVtAjExAHBkb2YFc3J0YwZhcHBfaWQMMzUwNjg1NTMxNzI4AAEe6T7KyltuhxZUKGf2hFi8JWpnhnH0S2NIFUXX4PA0TJvdNKiyJ6xMB_cKg58_aem_3yQIfSJ_A-clU4K8PJSj7w" },
+  { name: "FUTV (Costa Rica)", logo: "https://i.imgur.com/f8BkLql.png", url: "http://190.61.101.11:7050/play/a05o/index.m3u8?hls" },
+  { name: "Azteca Deportes Network", logo: "https://canvas-lb.tubitv.com/opts/MPS2aN2-BeVSwg==/2af69a6e-29ec-4543-842a-50650368d973/CHgQeDoFMS4xLjlAAQ==", url: "http://190.61.101.11:7050/play/a08l/index.m3u8?hls" },
+  { name: "Deportes13 (Chile)", logo: "https://i.imgur.com/GRpxoPf.png", url: "https://origin.dpsgo.com/ssai/event/uFiYkh4CQPCPgbs7WPKhXw/master.m3u8" },
+  { name: "Telemundo Deportes Ahora", logo: "https://i.postimg.cc/vHXxNfTY/telemundo-deportes-ahora-horizontal-33e33301.png", url: "https://d1rqgw5gocwo9i.cloudfront.net/manifest/3fec3e5cac39a52b2132f9c66c83dae043dc17d4/prod_default_xumo-nbcu-stitched/6a4c908e-7980-4fcb-93e3-584472a5f9a3/4.m3u8" },
+  { name: "SportMax", logo: "https://i.ibb.co/RT2pzP0p/Sport-Max.png", url: "https://cdnlive.klicgo.net/esportsmax/live/playlist_dvr.m3u8" },
 ];
 
 function extraStation(extra, index) {
@@ -1039,8 +1069,28 @@ async function resolveChannel(slug) {
     }
   }
   log("channel exhausted", slug, "dead sources:", dead);
+
+  // the same channel, from a stream that answered a few minutes ago
+  const name = await channelName(slug);
+  if (name && STREAM_BACKUP[name]) {
+    log("channel backup", name);
+    return { url: STREAM_BACKUP[name], mime: "application/x-mpegURL" };
+  }
+
   markDead("c-" + slug);
   return null;
+}
+
+async function channelName(slug) {
+  try {
+    const list = await channelList();
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].slug === slug) return list[i].name;
+    }
+  } catch (e) {
+    // no name, no backup
+  }
+  return "";
 }
 
 async function channelServers(slug) {
