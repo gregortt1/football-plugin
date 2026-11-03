@@ -40,6 +40,14 @@ página que emite la señal: un partido aparece solo si ESPN lo tiene, con la ho
 da y con los nombres de los dos clubes tal como los nombra ESPN. Las copas juveniles y de
 reserva quedan afuera, y también las entradas duplicadas o con un rival que no corresponde.
 
+Las cinco grandes de Europa —Premier League, LaLiga, Serie A, Bundesliga y Ligue 1— con sus
+copas (FA Cup, Carabao, Copa del Rey, Coppa Italia, DFB Pokal, Coupe de France), la Champions,
+la Europa y la Conference, y del otro lado la Libertadores, la Sudamericana, la Recopa, la Liga
+MX, la Liga Profesional, el Brasileirão y las ligas de Colombia, Chile, Perú, Paraguay, Uruguay,
+Ecuador, Venezuela y Bolivia. Las copas que ESPN no publica —Copa Argentina, Copa do Brasil,
+Copa Colombia, Copa Chile— siguen apareciendo con los datos del sitio, porque no hay contra qué
+cotejarlas.
+
 Cada partido lleva el escudo del club local y cada canal lleva su logo. La búsqueda de En vivo
 encuentra equipos y canales por nombre, y la guía de TV muestra a qué hora empieza cada partido.
 
@@ -61,6 +69,10 @@ muestra el escudo del equipo local. Si querés los dos, hay un Worker de Cloudfl
 pega en **Plugins ▸ Fútbol en vivo ▸ Configurar ▸ Compositor de escudos**. Las instrucciones
 están en [`worker/README.md`](worker/README.md). Sin ese ajuste, todo sigue funcionando igual.
 ## Cuando una señal no anda
+
+Si todas las fuentes de un partido fallan, el plugin mira qué canal lo transmite —la misma
+etiqueta que muestra el sitio, "ESPN", "Fox Sports", "ESPN 4"— y lo abre por ahí. Solo acepta
+el nombre exacto del canal: si el partido dice "ESPN AR" no lo manda a un ESPN de México.
 
 Cada canal tiene una o varias fuentes. El plugin las recorre en orden, saltea las que el propio
 sitio ya marca como caídas, y antes de darte una señal comprueba que el manifiesto responda

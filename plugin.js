@@ -266,34 +266,63 @@ const ESPN_CACHE_MS = 10 * 60 * 1000;
 
 // Stream-site competition name -> the ESPN leagues that may hold it, and the name to show.
 const ESPN_LEAGUES = [
-  [/^ligue 1/i, ["fra.1"], "Ligue 1"],
-  [/^ligue 2/i, ["fra.2"], "Ligue 2"],
-  [/^laliga( smartbank)?/i, ["esp.2"], "LaLiga 2"],
-  [/^laliga/i, ["esp.1"], "LaLiga"],
-  [/^(2\. )?bundesliga 2|^2\. bundesliga/i, ["ger.2"], "2. Bundesliga"],
-  [/^bundesliga/i, ["ger.1"], "Bundesliga"],
+  // Inglaterra y sus copas
   [/^premier league/i, ["eng.1"], "Premier League"],
   [/^championship/i, ["eng.2"], "Championship"],
   [/^league one/i, ["eng.3"], "League One"],
   [/^league two/i, ["eng.4"], "League Two"],
-  [/^(carabao cup|league cup)/i, ["eng.league_cup"], "Carabao Cup"],
+  [/^(carabao cup|league cup|efl cup)/i, ["eng.league_cup"], "Carabao Cup"],
+  [/^fa cup/i, ["eng.fa"], "FA Cup"],
+  [/^efl trophy/i, ["eng.trophy"], "EFL Trophy"],
+  // España
+  [/^laliga (smartbank|2)|^segunda divisi[oó]n/i, ["esp.2"], "LaLiga 2"],
+  [/^laliga/i, ["esp.1"], "LaLiga"],
+  [/^copa del rey/i, ["esp.copa_del_rey"], "Copa del Rey"],
+  // Italia
   [/^serie a/i, ["ita.1"], "Serie A"],
   [/^serie b/i, ["ita.2"], "Serie B"],
+  [/^coppa italia/i, ["ita.coppa_italia"], "Coppa Italia"],
+  // Alemania
+  [/^(2\. )?bundesliga 2|^2\. bundesliga/i, ["ger.2"], "2. Bundesliga"],
+  [/^bundesliga/i, ["ger.1"], "Bundesliga"],
+  [/^dfb[- ]?pokal/i, ["ger.dfb_pokal"], "DFB Pokal"],
+  // Francia
+  [/^ligue 1/i, ["fra.1"], "Ligue 1"],
+  [/^ligue 2/i, ["fra.2"], "Ligue 2"],
+  [/^coupe de france/i, ["fra.coupe_de_france"], "Coupe de France"],
+  [/^troph[eé]e des champions/i, ["fra.super_cup"], "Trophée des Champions"],
+  // Europa
+  [/^(uefa )?champions league|^liga de campeones/i, ["uefa.champions"], "Champions League"],
+  [/^(uefa )?europa league|^liga europa/i, ["uefa.europa"], "Europa League"],
+  [/conference league|uefa conference/i, ["uefa.europa.conf"], "Conference League"],
+  // Sudamérica
+  [/libertadores/i, ["conmebol.libertadores"], "Copa Libertadores"],
+  [/sudamericana/i, ["conmebol.sudamericana"], "Copa Sudamericana"],
+  [/recopa/i, ["conmebol.recopa"], "Recopa Sudamericana"],
+  // Argentina, Brasil, México
+  [/^liga profesional( argentina)?$/i, ["arg.1"], "Liga Profesional"],
+  [/^brasileir[aã]o/i, ["bra.1"], "Brasileirão"],
+  [/^s[eé]rie b/i, ["bra.2"], "Série B"],
+  [/^liga mx$/i, ["mex.1"], "Liga MX"],
+  [/^liga de expansi[oó]n mx/i, ["mex.2"], "Liga de Expansión MX"],
+  [/^copa mx/i, ["mex.copa_mx"], "Copa MX"],
+  // Colombia, Chile, Perú, Paraguay, Uruguay, Ecuador, Venezuela, Bolivia
+  [/^liga betplay/i, ["col.1"], "Liga BetPlay"],
+  [/^primera a$/i, ["col.1"], "Primera A"],
+  [/^liga chile$/i, ["chi.1"], "Liga Chile"],
+  [/^liga 1$/i, ["per.1"], "Liga 1"],
+  [/^liga paraguay$/i, ["par.1"], "Liga Paraguay"],
+  [/^liga auf|^primera divisi[oó]n uruguaya/i, ["uru.1"], "Liga AUF"],
+  [/^liga pro|^liga ecuador/i, ["ecu.1"], "LigaPro"],
+  [/^liga venezolana|^liga futve/i, ["ven.1"], "Liga FUTVE"],
+  [/^primera divisi[oó]n$/i, ["chi.1", "bol.1", "crc.1"], "Primera División"],
+  // Otras
   [/^primeira liga/i, ["por.1"], "Primeira Liga"],
   [/^s[uü]per lig/i, ["tur.1"], "Süper Lig"],
   [/^(saudi pro league|pro league|liga profesional saud[ií])/i, ["ksa.1"], "Saudi Pro League"],
-  [/^brasileir[aã]o/i, ["bra.1"], "Brasileirão"],
-  [/^liga profesional( argentina)?$/i, ["arg.1"], "Liga Profesional"],
-  [/^liga betplay/i, ["col.1"], "Liga BetPlay"],
-  [/^primera a/i, ["col.1"], "Primera A"],
-  [/^liga mx$/i, ["mex.1"], "Liga MX"],
-  [/^liga de expansi[oó]n mx/i, ["mex.2"], "Liga de Expansión MX"],
-  [/^liga 1$/i, ["per.1"], "Liga 1"],
-  [/^liga chile$/i, ["chi.1"], "Liga Chile"],
-  [/^liga paraguay$/i, ["par.1"], "Liga Paraguay"],
-  [/^primera divisi[oó]n$/i, ["chi.1", "bol.1", "crc.1"], "Primera División"],
   [/^eredivisie$/i, ["ned.1"], "Eredivisie"],
   [/^mls$/i, ["usa.1"], "MLS"],
+  // lo que este plugin no muestra
   [/messi cup|u1[5-9]|u2[0-3]|\bsub\s?\d/i, null, ""],
 ];
 
@@ -760,6 +789,23 @@ function extraStation(extra, index) {
 }
 // One list of stations: the site's own directory, with the six channels that exist in both
 // an Argentine and a Mexican feed replaced by those two, each named with its country.
+const deadStations = Object.create(null);
+const DEAD_MS = 30 * 60 * 1000;
+
+function markDead(station) {
+  if (station) deadStations[station] = Date.now();
+}
+
+function looksDead(id) {
+  const at = deadStations[id];
+  if (!at) return false;
+  if (Date.now() - at > DEAD_MS) {
+    delete deadStations[id];
+    return false;
+  }
+  return true;
+}
+
 async function stationList() {
   const base = await channelList();
   const bySlug = Object.create(null);
@@ -797,12 +843,13 @@ async function stationList() {
     out.push(extraStation(EXTRA_STREAMS[e], e));
   }
 
-  // the same name twice is the same channel twice: keep the first
+  // the same name twice is the same channel twice: keep the first, and skip what just failed
   const seen = Object.create(null);
   const unique = [];
   for (let i = 0; i < out.length; i++) {
     const key = plain(out[i].title);
     if (seen[key]) continue;
+    if (looksDead(out[i].id)) continue;
     seen[key] = true;
     unique.push(out[i]);
   }
@@ -992,6 +1039,7 @@ async function resolveChannel(slug) {
     }
   }
   log("channel exhausted", slug, "dead sources:", dead);
+  markDead("c-" + slug);
   return null;
 }
 
@@ -1052,6 +1100,7 @@ async function resolveFeed(payload) {
     return { url: streamUrl, mime: "application/x-mpegURL" };
   } catch (e) {
     log("feed failed", source, slug, e && e.message);
+    markDead("f-" + source + "-" + slug);
     return null;
   }
 }
@@ -1060,11 +1109,12 @@ async function resolveMatch(payload) {
   const parts = String(payload || "").split("~");
   const slug = parts[0];
   const at = Number(parts[1]) || 0;
-  let sources = parts[2]
+  let ids = parts[2]
     ? parts[2].split(".").filter(function (id) {
         return /^\d+$/.test(id);
       })
     : [];
+  let sources = [];
   if (!slug) return null;
 
   const now = Date.now();
@@ -1077,34 +1127,85 @@ async function resolveMatch(payload) {
     });
   }
 
-  if (!sources.length) {
-    try {
-      const page = await getText(MATCH_URL + encodeURIComponent(slug));
-      sources = parseSourceIds(page);
-    } catch (e) {
-      log("match page failed", slug, e && e.message);
-    }
+  try {
+    const page = await getText(MATCH_URL + encodeURIComponent(slug));
+    sources = parseSources(page);
+  } catch (e) {
+    log("match page failed", slug, e && e.message);
+  }
+  if (!sources.length && ids.length) {
+    for (let i = 0; i < ids.length; i++) sources.push({ id: ids[i], name: "" });
   }
 
   let attempts = 0;
   for (let i = 0; i < sources.length && attempts < MAX_SOURCES; i++) {
     attempts++;
     try {
-      const stream = await eventFromSource(slug, sources[i]);
+      const stream = await eventFromSource(slug, sources[i].id);
       if (stream) return stream;
     } catch (e) {
-      log("match source failed", sources[i], e && e.message);
+      log("match source failed", sources[i].id, e && e.message);
+    }
+  }
+
+  // Every source of this match is dead: play the channel that carries it, when we know it.
+  return await streamFromBroadcast(sources);
+}
+
+// "Fuente 2 · ESPN" means the match is on ESPN. Only an exact channel name counts, so an
+// Argentine feed is never replaced by a Mexican one.
+async function streamFromBroadcast(sources) {
+  const names = [];
+  for (let i = 0; i < sources.length; i++) {
+    const name = plain(sources[i].name);
+    if (name && names.indexOf(name) === -1) names.push(name);
+  }
+  if (!names.length) return null;
+
+  let stations;
+  try {
+    stations = await stationList();
+  } catch (e) {
+    return null;
+  }
+
+  for (let n = 0; n < names.length; n++) {
+    for (let s = 0; s < stations.length; s++) {
+      const station = stations[s];
+      if (plain(station.title) !== names[n]) continue;
+      log("fallback to channel", station.title);
+      if (station.stream) return { url: station.stream, mime: "application/x-mpegURL" };
+      if (station.ref && station.ref.indexOf("c~") === 0) {
+        const stream = await resolveChannel(station.ref.slice(2));
+        if (stream) return stream;
+      }
     }
   }
   return null;
 }
 
-function parseSourceIds(html) {
+// Each source button says which channel carries it: "Fuente 2 · ESPN AR". The name is what
+// lets a dead match fall back to that channel.
+function parseSources(html) {
+  const page = String(html || "");
   const out = [];
-  const re = /data-source="(\d+)"/g;
+  const seen = Object.create(null);
+  const button = /data-source="(\d+)"[^>]*title="([^"]*)"/g;
   let m;
-  while ((m = re.exec(String(html || "")))) {
-    if (out.indexOf(m[1]) === -1) out.push(m[1]);
+  while ((m = button.exec(page))) {
+    const id = m[1];
+    if (seen[id]) continue;
+    seen[id] = true;
+    const label = clean(m[2]).split("·").pop().trim();
+    out.push({ id: id, name: label });
+  }
+  if (out.length) return out.slice(0, 8);
+
+  const plain = /data-source="(\d+)"/g;
+  while ((m = plain.exec(page))) {
+    if (seen[m[1]]) continue;
+    seen[m[1]] = true;
+    out.push({ id: m[1], name: "" });
   }
   return out.slice(0, 8);
 }
