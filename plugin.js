@@ -3,10 +3,17 @@
 // Target: Kino QuickJS sandbox (no fetch/Buffer/require; kino.fetch only), apiVersion 15.
 
 const SITE = "https://pelotalibre.biz";
-const AGENDA_URL = SITE + "/agenda";
-const CHANNELS_URL = SITE + "/channels";
-const MATCH_URL = SITE + "/match/";
-const PLAYBACK_URL = SITE + "/api/direct-playback.php";
+// The same platform answers on two domains: when one stops answering, the other keeps the
+// agenda, the match pages and the playback API working.
+const SITES = [SITE, "https://futbol-libre.app"];
+const SITE_FAIL_MS = 5 * 60 * 1000;
+const siteFailedAt = Object.create(null);
+let siteIndex = 0;
+
+const AGENDA_PATH = "/agenda";
+const CHANNELS_PATH = "/channels";
+const MATCH_PATH = "/match/";
+const PLAYBACK_PATH = "/api/direct-playback.php";
 const DEFAULT_LOGO = SITE + "/assets/channel-logos/default-channel.svg";
 
 // Two sister sites carry the same channel names with the country in the open: one serves the
@@ -49,7 +56,7 @@ const CHANNELS_CACHE_MS = 300000;
 const STREAM_CACHE_MS = 120000;
 const MATCH_PAGE = 300;
 const CHANNEL_PAGE = 300;
-const MAX_SOURCES = 6;
+const MAX_SOURCES = 4;
 const MAX_SERVERS = 3;
 
 // A football match runs up to two hours with half time and stoppage time.
@@ -675,7 +682,7 @@ async function agendaHtml() {
   const now = Date.now();
   if (agendaCache.html && now - agendaCache.at < AGENDA_CACHE_MS) return agendaCache.html;
   try {
-    const html = await getText(AGENDA_URL);
+    const html = await siteText(AGENDA_PATH);
     if (html && html.length > 1000) {
       agendaCache = { at: now, html: html };
       return html;
@@ -698,7 +705,7 @@ async function channelList() {
   const now = Date.now();
   if (channelsCache.list.length && now - channelsCache.at < CHANNELS_CACHE_MS) return channelsCache.list;
   try {
-    const html = await getText(CHANNELS_URL);
+    const html = await siteText(CHANNELS_PATH);
     const list = parseChannels(html);
     if (list.length) {
       channelsCache = { at: now, list: list };
@@ -710,6 +717,54 @@ async function channelList() {
     if (channelsCache.list.length) return channelsCache.list;
     return [];
   }
+}
+
+// --- the site, with a spare ----------------------------------------------
+
+async function siteText(path, cap) {
+  const order = [siteIndex];
+  for (let i = 0; i < SITES.length; i++) if (i !== siteIndex) order.push(i);
+
+  let last = null;
+  for (let i = 0; i < order.length; i++) {
+    const index = order[i];
+    const failedAt = siteFailedAt[index];
+    if (failedAt && Date.now() - failedAt < SITE_FAIL_MS) continue;
+    try {
+      const body = await getText(SITES[index] + path, cap || 4000);
+      siteIndex = index;
+      delete siteFailedAt[index];
+      return body;
+    } catch (e) {
+      siteFailedAt[index] = Date.now();
+      last = e;
+      log("site failed", SITES[index], path, e && e.message);
+    }
+  }
+  throw last || new Error("no site");
+}
+
+async function siteJson(path, cap) {
+  const order = [siteIndex];
+  for (let i = 0; i < SITES.length; i++) if (i !== siteIndex) order.push(i);
+
+  let last = null;
+  for (let i = 0; i < order.length; i++) {
+    const index = order[i];
+    const failedAt = siteFailedAt[index];
+    if (failedAt && Date.now() - failedAt < SITE_FAIL_MS) continue;
+    try {
+      const body = await getJson(SITES[index] + path, cap || 4000);
+      siteIndex = index;
+      delete siteFailedAt[index];
+      return body;
+    } catch (e) {
+      siteFailedAt[index] = Date.now();
+      last = e;
+      log("site failed", SITES[index], path, e && e.message);
+    }
+  }
+  throw last || new Error("no site");
 }
 
 // --- network helpers ------------------------------------------------------
@@ -735,21 +790,21 @@ function budgetTimeout(most) {
   return Math.max(2000, Math.min(most, left));
 }
 
-async function getText(url) {
+async function getText(url, cap) {
   if (remainingMs() <= 0) throw new Error("out of time");
   const res = await kino.fetch(url, {
     headers: { "User-Agent": UA, Referer: SITE + "/" },
-    timeoutMs: budgetTimeout(8000),
+    timeoutMs: budgetTimeout(cap || 8000),
   });
   if (!res || !res.ok) throw new Error("HTTP " + (res ? res.status : "?"));
   return await res.text();
 }
 
-async function getJson(url) {
+async function getJson(url, cap) {
   if (remainingMs() <= 0) throw new Error("out of time");
   const res = await kino.fetch(url, {
     headers: { "User-Agent": UA, Accept: "application/json", Referer: SITE + "/" },
-    timeoutMs: budgetTimeout(6000),
+    timeoutMs: budgetTimeout(cap || 6000),
   });
   if (!res || !res.ok) throw new Error("HTTP " + (res ? res.status : "?"));
   return await res.json();
@@ -967,7 +1022,14 @@ export async function liveChannels(arg) {
     return pageOf(all, cursor, CHANNEL_PAGE);
   }
 
-  const events = await agendaEvents();
+  // the site being unreachable must not turn into an error screen: the channels still work
+  let events = [];
+  try {
+    events = await agendaEvents();
+  } catch (e) {
+    log("agenda unavailable", e && e.message);
+    return { items: [] };
+  }
   const now = Date.now();
   let selected;
 
@@ -1038,7 +1100,12 @@ export async function guide(arg) {
   const to = Number(arg && arg.to) || 0;
   if (!ids.length) return [];
 
-  const events = await agendaEvents();
+  let events;
+  try {
+    events = await agendaEvents();
+  } catch (e) {
+    return [];
+  }
   const bySlug = Object.create(null);
   for (let i = 0; i < events.length; i++) bySlug[events[i].slug] = events[i];
 
@@ -1168,7 +1235,7 @@ async function channelName(slug) {
 async function channelServers(slug) {
   const fallback = [4, 1, 3];
   try {
-    const page = await getText(SITE + "/channel/" + encodeURIComponent(slug));
+    const page = await siteText("/channel/" + encodeURIComponent(slug));
     const found = [];
     const re = /data-server="(\d+)"[^>]*data-source="\d+"/g;
     let m;
@@ -1185,14 +1252,14 @@ async function channelServers(slug) {
 
 async function channelFromServer(slug, server) {
   const url =
-    PLAYBACK_URL +
+    PLAYBACK_PATH +
     "?type=channel&slug=" +
     encodeURIComponent(slug) +
     "&server=" +
     encodeURIComponent(String(server)) +
     "&automatic=1";
 
-  const answer = await getJson(url);
+  const answer = await siteJson(url);
   if (!answer) return null;
   return { url: answer.url ? String(answer.url) : "", health: String(answer.health || "") };
 }
@@ -1250,7 +1317,7 @@ async function resolveMatch(payload) {
   }
 
   try {
-    const page = await getText(MATCH_URL + encodeURIComponent(slug));
+    const page = await siteText(MATCH_PATH + encodeURIComponent(slug));
     sources = parseSources(page);
   } catch (e) {
     log("match page failed", slug, e && e.message);
@@ -1358,14 +1425,14 @@ function parseSources(html) {
 
 async function eventFromSource(slug, sourceId, deep) {
   const url =
-    PLAYBACK_URL +
+    PLAYBACK_PATH +
     "?type=event&slug=" +
     encodeURIComponent(slug) +
     "&source=" +
     encodeURIComponent(sourceId) +
     "&automatic=1";
 
-  const answer = await getJson(url);
+  const answer = await siteJson(url);
   if (!answer || !answer.url) return null;
   if (String(answer.health || "") === "failed") return null; // the site says this source is down
   return streamFromRelay(String(answer.url), deep);

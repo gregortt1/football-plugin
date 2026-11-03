@@ -77,6 +77,14 @@ muestra el escudo del equipo local. Si querés los dos, hay un Worker de Cloudfl
 `worker/` que compone los dos escudos en una imagen: se despliega una vez, y su dirección se
 pega en **Plugins ▸ Fútbol en vivo ▸ Configurar ▸ Compositor de escudos**. Las instrucciones
 están en [`worker/README.md`](worker/README.md). Sin ese ajuste, todo sigue funcionando igual.
+## Si el sitio no responde
+
+El plugin vive de un sitio que a veces se cae o bloquea conexiones: cuando eso pasa, *En vivo* y
+*Próximos partidos* quedan vacíos en lugar de mostrar un error, y *Canales deportivos* sigue
+funcionando con los canales que no dependen de él. Además hay una segunda dirección de la misma
+plataforma: si la primera no contesta en cuatro segundos, el plugin sigue por la otra y se queda
+con la que respondió.
+
 ## Cuando una señal no anda
 
 Si todas las fuentes de un partido fallan, el plugin mira qué canal lo transmite —la misma
