@@ -960,8 +960,6 @@ const BRANDS = [
   { id: "fox", title: "Fox Sports", re: /^fox\s*sports|^fox\s*deportes|^fox\b/i },
   { id: "dsports", title: "DSports", re: /^d\s*sports|^directv\s*sports|^dsports/i },
   { id: "tigo", title: "Tigo Sports", re: /^tigo\s*sports/i },
-  { id: "dazn", title: "DAZN", re: /^dazn/i },
-  { id: "bein", title: "beIN Sports", re: /^bein\s*sports/i },
   { id: "tyc", title: "TyC Sports", re: /^tyc\s*sports/i },
   { id: "tnt", title: "TNT Sports", re: /^tnt\s*sports/i },
 ];
@@ -982,7 +980,6 @@ const EXTRA_STREAMS = [
   { name: "Tigo Sports (Honduras)", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Tigo_Sports_2025.png/960px-Tigo_Sports_2025.png", url: "http://168.196.127.137:6001/play/a0ay/index.m3u8" },
   { name: "Tigo Sports+ (Paraguay)", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Tigo_Sports_2025.png/960px-Tigo_Sports_2025.png", url: "http://45.170.130.224:8000/play/a04i/index.m3u8" },
   { name: "TNT Sports Premium (Chile)", logo: "", url: "http://190.108.83.69:8000/play/a03i/index.m3u8" },
-  { name: "beIN SPORTS XTRA en Español", logo: "https://i.imgur.com/V562tpO.png", url: "https://dc1644a9jazgj.cloudfront.net/beIN_Sports_Xtra_Espanol.m3u8" },
 ];
 
 function extraStation(extra, index) {

@@ -58,7 +58,7 @@ encuentra equipos y canales por nombre, y la guía de TV muestra a qué hora emp
 ## Los canales, por marca
 
 *Canales deportivos* ya no es una lista larga: cada marca tiene su fila en En vivo —**ESPN, Fox
-Sports, DSports, Tigo Sports, DAZN, beIN Sports, TyC Sports y TNT Sports**—, con sus señales de
+Sports, DSports, Tigo Sports, TyC Sports y TNT Sports**—, con sus señales de
 cada país dentro. El
 resto del directorio no se muestra: seis filas con lo que la gente mira rinden más que treinta
 canales que nadie abre.
