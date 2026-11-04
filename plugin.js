@@ -938,13 +938,13 @@ function onePerBroadcaster() {
 // Streams known to answer for channels the directory already lists: when the site's sources
 // are down, the same channel plays from here. Names are the plugin's own channel names.
 const STREAM_BACKUP = {
-  "ESPN": "http://190.61.101.11:7050/play/a09k/index.m3u8?hls",
-  "ESPN 2": "http://190.108.83.69:8000/play/a0an/index.m3u8",
-  "ESPN 3": "http://190.108.83.69:8000/play/a039/index.m3u8",
-  "ESPN 4": "http://190.61.101.11:7050/play/a08p/index.m3u8?hls",
-  "ESPN 5": "http://190.61.101.11:7050/play/a06j/index.m3u8?hls",
-  "ESPN 6": "http://190.61.101.11:7050/play/a05e/index.m3u8?hls",
-  "ESPN 7": "http://205.235.6.29:8000/play/a0zv/index.m3u8?hls",
+  "ESPN": "https://barinaslive1.boldmss.com/ESPN/ESPN.isml/ESPN.m3u8",
+  "ESPN 2": "https://barinaslive1.boldmss.com/ESPN_2/ESPN_2.isml/ESPN_2.m3u8",
+  "ESPN 3": "https://barinaslive1.boldmss.com/ESPN_3/ESPN_3.isml/ESPN_3.m3u8",
+  "ESPN 4": "https://barinaslive1.boldmss.com/ESPN_4/ESPN_4.isml/ESPN_4.m3u8",
+  "ESPN 5": "https://barinaslive1.boldmss.com/ESPN_5/ESPN_5.isml/ESPN_5.m3u8",
+  "ESPN 6": "https://barinaslive1.boldmss.com/ESPN_6/ESPN_6.isml/ESPN_6.m3u8",
+  "ESPN 7": "https://barinaslive1.boldmss.com/ESPN_7/ESPN_7.isml/ESPN_7.m3u8",
   "ESPN Premium": "http://205.235.6.29:8000/play/a0wl/index.m3u8?hls",
   "Fox Sports": "http://190.61.101.11:7050/play/a08t/index.m3u8?hls",
   "DSports": "http://190.117.20.37:8000/play/a08d/index.m3u8",

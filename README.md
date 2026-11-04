@@ -74,7 +74,7 @@ conocida, así que Kino los abre sin pasar por el sitio.
 Son señales de terceros: algunas están geobloqueadas fuera de su país y otras se caen sin aviso.
 Antes de agregar una se comprobó que estuviera emitiendo, pero eso no lo garantiza para mañana.
 
-Además, para dieciséis canales del directorio que suelen quedarse sin fuente —ESPN y sus señales,
+Además, para trece canales del directorio que suelen quedarse sin fuente —ESPN y sus señales,
 Fox Sports, TyC Sports, TNT Sports, DSports, Movistar Deportes, Sky Sports LaLiga, TUDN— el
 plugin guarda una señal de respaldo ya comprobada: si la del sitio no responde, el mismo canal
 se abre por ahí. En el peor caso se ve el mismo canal, no una pantalla negra.
