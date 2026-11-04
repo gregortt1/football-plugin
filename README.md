@@ -55,6 +55,13 @@ sitio todavía lo tenga en la agenda.
 Cada partido lleva el escudo del club local y cada canal lleva su logo. La búsqueda de En vivo
 encuentra equipos y canales por nombre, y la guía de TV muestra a qué hora empieza cada partido.
 
+## Los canales, por marca
+
+*Canales deportivos* ya no es una lista larga: cada marca tiene su fila en En vivo —**ESPN, Fox
+Sports, DSports, Tigo Sports, DAZN y beIN Sports**—, con sus señales de cada país dentro. El
+resto del directorio no se muestra: seis filas con lo que la gente mira rinden más que treinta
+canales que nadie abre.
+
 ## Canales que la agenda no trae
 
 Además del directorio del sitio, el plugin suma canales deportivos latinos que salen de las

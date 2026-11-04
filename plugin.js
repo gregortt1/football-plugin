@@ -530,6 +530,7 @@ async function confirmFixtures(events, now) {
       away: confirmed.fixture.away,
       at: confirmed.fixture.at,
       sources: event.sources,
+      labels: event.labels || [],
       crest: confirmed.fixture.homeLogo,
       crestAway: confirmed.fixture.awayLogo,
       espnId: confirmed.fixture.id,
@@ -824,11 +825,21 @@ export async function home() {
 }
 
 export async function liveCategories() {
-  return [
+  const out = [
     { id: "vivo", title: t("Partidos en vivo", "Live matches"), genre: "deportes" },
-    { id: "canales", title: t("Canales deportivos", "Sports channels"), genre: "deportes" },
     { id: "proximos", title: t("Próximos partidos", "Upcoming matches"), genre: "deportes" },
   ];
+  for (let i = 0; i < BRANDS.length; i++) {
+    out.push({ id: BRANDS[i].id, title: BRANDS[i].title, genre: "deportes" });
+  }
+  return out;
+}
+
+function brandById(id) {
+  for (let i = 0; i < BRANDS.length; i++) {
+    if (BRANDS[i].id === id) return BRANDS[i];
+  }
+  return null;
 }
 
 function isLive(event, now) {
@@ -927,22 +938,37 @@ function onePerBroadcaster() {
 // Streams known to answer for channels the directory already lists: when the site's sources
 // are down, the same channel plays from here. Names are the plugin's own channel names.
 const STREAM_BACKUP = {
-  "ESPN 2": "http://190.108.83.69:8000/play/a0an/index.m3u8",
-  "ESPN 3": "http://190.108.83.69:8000/play/a039/index.m3u8",  "Sky Sports LaLiga": "http://190.61.101.11:7050/play/a04g/index.m3u8?hls",
-  "TUDN": "http://181.119.177.253:8000/play/a0ds/index.m3u8",
-  "TyC Sports": "http://45.186.254.75:8000/play/a08n/index.m3u8",
-  "TNT Sports": "http://181.79.87.131:8000/play/a0e0/index.m3u8",
-  "DSports 2": "http://201.240.104.137:8000/play/dtv2/index.m3u8",
-  "DSports": "http://190.117.20.37:8000/play/a08d/index.m3u",
-  "Fox Sports": "http://190.61.101.11:7050/play/a08t/index.m3u8?hls",
-  "Movistar Deportes": "http://190.108.83.69:8000/play/a07o/index.m3u8",
   "ESPN": "http://190.61.101.11:7050/play/a09k/index.m3u8?hls",
+  "ESPN 2": "http://190.108.83.69:8000/play/a0an/index.m3u8",
+  "ESPN 3": "http://190.108.83.69:8000/play/a039/index.m3u8",
   "ESPN 4": "http://190.61.101.11:7050/play/a08p/index.m3u8?hls",
   "ESPN 5": "http://190.61.101.11:7050/play/a06j/index.m3u8?hls",
   "ESPN 6": "http://190.61.101.11:7050/play/a05e/index.m3u8?hls",
-  "ESPN Premium": "http://205.235.6.29:8000/play/a0wl/index.m3u8?hls",
   "ESPN 7": "http://205.235.6.29:8000/play/a0zv/index.m3u8?hls",
+  "ESPN Premium": "http://205.235.6.29:8000/play/a0wl/index.m3u8?hls",
+  "Fox Sports": "http://190.61.101.11:7050/play/a08t/index.m3u8?hls",
+  "DSports": "http://190.117.20.37:8000/play/a08d/index.m3u8",
+  "DSports 2": "http://201.240.104.137:8000/play/dtv2/index.m3u8",
 };
+
+// The brands the plugin shows. Anything else the directory carries is left out on purpose:
+// a list of thirty sports channels nobody opens is worse than six that are the ones people watch.
+const BRANDS = [
+  { id: "espn", title: "ESPN", re: /^espn\b|^espn\s*\d/i },
+  { id: "fox", title: "Fox Sports", re: /^fox\s*sports|^fox\s*deportes|^fox\b/i },
+  { id: "dsports", title: "DSports", re: /^d\s*sports|^directv\s*sports|^dsports/i },
+  { id: "tigo", title: "Tigo Sports", re: /^tigo\s*sports/i },
+  { id: "dazn", title: "DAZN", re: /^dazn/i },
+  { id: "bein", title: "beIN Sports", re: /^bein\s*sports/i },
+];
+
+function brandOf(title) {
+  const name = plain(title);
+  for (let i = 0; i < BRANDS.length; i++) {
+    if (BRANDS[i].re.test(name)) return BRANDS[i];
+  }
+  return null;
+}
 
 // Channels the stream site does not carry, from the public iptv-org lists: Latin sports
 // channels that answer today. They come with their stream already known, so Kino plays them
@@ -950,25 +976,8 @@ const STREAM_BACKUP = {
 const EXTRA_STREAMS = [
   { name: "Tigo Sports (Paraguay)", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Tigo_Sports_2025.png/960px-Tigo_Sports_2025.png", url: "http://45.134.141.161:2200/ARG/Tigo_Sports/tracks-v1a1/mono.m3u8" },
   { name: "Tigo Sports (Honduras)", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Tigo_Sports_2025.png/960px-Tigo_Sports_2025.png", url: "http://168.196.127.137:6001/play/a0ay/index.m3u8" },
-  { name: "FTV (Bolivia)", logo: "https://i.imgur.com/YOr1Oac.png", url: "https://master.tucableip.com/ftvhd/index.m3u8" },
-  { name: "Deportes TVC (Honduras)", logo: "https://i.ibb.co/kszxTgHm/B74-D2-F54-1693-4-DB5-AB5-F-80-AA15987-B7-A.png", url: "http://162.19.255.233:8080/play/UNbAl57p9hXZClOu56FCTYXmD-MOS3u5IUkeXPpBt80/m3u8" },
-  { name: "CDN Deportes (Rep. Dominicana)", logo: "https://i.imgur.com/yU5LqTL.png", url: "https://hls.tvabierta.net/hls/036.m3u8" },
-  { name: "ITV Deportes (México)", logo: "https://iili.io/J1kV1Bn.png", url: "https://thm-it-roku.otteravision.com/thm/it/it.m3u8" },
-  { name: "Teletrak (Chile)", logo: "https://i.imgur.com/NoJvlig.png", url: "https://unlimited6-cl.dps.live/sportinghd/sportinghd.smil/playlist.m3u8" },
-  { name: "Turf Móvil (Chile)", logo: "https://i.imgur.com/TwIe4lK.png", url: "https://tvturf4.janus.cl/playlist/stream.m3u8?d=w&id=" },
-  { name: "AS3 Sport TV (Venezuela)", logo: "https://i.ibb.co/bRmGbsyV/A3-SPORTTV.jpg", url: "https://streamtv.as3sport.online:3394/hybrid/play.m3u8" },
-  { name: "FIFA+ (Latinoamérica)", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/FIFA%2B_(2025).svg/960px-FIFA%2B_(2025).svg.png", url: "https://6c849fb3.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/TEctbXhfRklGQVBsdXNTcGFuaXNoLTFfSExT/playlist.m3u8" },
-  { name: "Real Madrid TV", logo: "https://i.imgur.com/5pMo7dL.png", url: "https://rmtv.akamaized.net/hls/live/2043153/rmtv-es-web/master.m3u8" },
-  { name: "TNT Sports Premium (Chile)", logo: "", url: "http://190.108.83.69:8000/play/a03i/index.m3u8" },
-  { name: "beIN SPORTS XTRA en Español", logo: "https://i.imgur.com/V562tpO.png", url: "https://dc1644a9jazgj.cloudfront.net/beIN_Sports_Xtra_Espanol.m3u8" },
   { name: "Tigo Sports+ (Paraguay)", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Tigo_Sports_2025.png/960px-Tigo_Sports_2025.png", url: "http://45.170.130.224:8000/play/a04i/index.m3u8" },
-  { name: "Teledeporte (España)", logo: "https://graph.facebook.com/teledeporteRTVE/picture?width=200&height=200", url: "https://stream.ads.ottera.tv/playlist.m3u8?network_id=15601" },
-  { name: "Claro Sports", logo: "https://pbs.twimg.com/profile_images/412626363011457024/s87vGCpO_400x400.jpeg", url: "http://45.182.22.53:8000/play/a0c2/index.m3u8?fbclid=Iwb21leAUpZV5jbGNrBSllUmV4dG4DYWVtAjExAHBkb2YFc3J0YwZhcHBfaWQMMzUwNjg1NTMxNzI4AAEe6T7KyltuhxZUKGf2hFi8JWpnhnH0S2NIFUXX4PA0TJvdNKiyJ6xMB_cKg58_aem_3yQIfSJ_A-clU4K8PJSj7w" },
-  { name: "FUTV (Costa Rica)", logo: "https://i.imgur.com/f8BkLql.png", url: "http://190.61.101.11:7050/play/a05o/index.m3u8?hls" },
-  { name: "Azteca Deportes Network", logo: "https://canvas-lb.tubitv.com/opts/MPS2aN2-BeVSwg==/2af69a6e-29ec-4543-842a-50650368d973/CHgQeDoFMS4xLjlAAQ==", url: "http://190.61.101.11:7050/play/a08l/index.m3u8?hls" },
-  { name: "Deportes13 (Chile)", logo: "https://i.imgur.com/GRpxoPf.png", url: "https://origin.dpsgo.com/ssai/event/uFiYkh4CQPCPgbs7WPKhXw/master.m3u8" },
-  { name: "Telemundo Deportes Ahora", logo: "https://i.postimg.cc/vHXxNfTY/telemundo-deportes-ahora-horizontal-33e33301.png", url: "https://d1rqgw5gocwo9i.cloudfront.net/manifest/3fec3e5cac39a52b2132f9c66c83dae043dc17d4/prod_default_xumo-nbcu-stitched/6a4c908e-7980-4fcb-93e3-584472a5f9a3/4.m3u8" },
-  { name: "SportMax", logo: "https://i.ibb.co/RT2pzP0p/Sport-Max.png", url: "https://cdnlive.klicgo.net/esportsmax/live/playlist_dvr.m3u8" },
+  { name: "beIN SPORTS XTRA en Español", logo: "https://i.imgur.com/V562tpO.png", url: "https://dc1644a9jazgj.cloudfront.net/beIN_Sports_Xtra_Espanol.m3u8" },
 ];
 
 function extraStation(extra, index) {
@@ -1040,7 +1049,7 @@ async function stationList() {
   const seen = Object.create(null);
   const unique = [];
   for (let i = 0; i < out.length; i++) {
-    const key = plain(out[i].title);
+    const key = plain(String(out[i].title).replace(/\+/g, " plus ")).replace(/\ben\b/g, " ").replace(/\s+/g, " ").trim();
     if (seen[key]) continue;
     if (looksDead(out[i].id)) continue;
     seen[key] = true;
@@ -1075,9 +1084,14 @@ export async function liveChannels(arg) {
   const cursor = arg && arg.cursor ? Number(arg.cursor) : 0;
   if (!isFinite(cursor) || cursor < 0) throw kino.error("not_found", "cursor inválido");
 
-  if (categoryId === "canales") {
+  const brand = brandById(categoryId);
+  if (brand) {
     const list = await stationList();
-    const all = list.map(function (station, index) {
+    const mine = [];
+    for (let i = 0; i < list.length; i++) {
+      if (brandOf(list[i].title) === brand) mine.push(list[i]);
+    }
+    const all = mine.map(function (station, index) {
       return sportsChannel(station, index, categoryId);
     });
     return pageOf(all, cursor, CHANNEL_PAGE);
