@@ -949,6 +949,8 @@ const STREAM_BACKUP = {
   "Fox Sports": "http://190.61.101.11:7050/play/a08t/index.m3u8?hls",
   "DSports": "http://190.117.20.37:8000/play/a08d/index.m3u8",
   "DSports 2": "http://201.240.104.137:8000/play/dtv2/index.m3u8",
+  "TyC Sports": "http://45.186.254.75:8000/play/a08n/index.m3u8",
+  "TNT Sports": "http://181.79.87.131:8000/play/a0e0/index.m3u8",
 };
 
 // The brands the plugin shows. Anything else the directory carries is left out on purpose:
@@ -960,6 +962,8 @@ const BRANDS = [
   { id: "tigo", title: "Tigo Sports", re: /^tigo\s*sports/i },
   { id: "dazn", title: "DAZN", re: /^dazn/i },
   { id: "bein", title: "beIN Sports", re: /^bein\s*sports/i },
+  { id: "tyc", title: "TyC Sports", re: /^tyc\s*sports/i },
+  { id: "tnt", title: "TNT Sports", re: /^tnt\s*sports/i },
 ];
 
 function brandOf(title) {
@@ -977,6 +981,7 @@ const EXTRA_STREAMS = [
   { name: "Tigo Sports (Paraguay)", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Tigo_Sports_2025.png/960px-Tigo_Sports_2025.png", url: "http://45.134.141.161:2200/ARG/Tigo_Sports/tracks-v1a1/mono.m3u8" },
   { name: "Tigo Sports (Honduras)", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Tigo_Sports_2025.png/960px-Tigo_Sports_2025.png", url: "http://168.196.127.137:6001/play/a0ay/index.m3u8" },
   { name: "Tigo Sports+ (Paraguay)", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Tigo_Sports_2025.png/960px-Tigo_Sports_2025.png", url: "http://45.170.130.224:8000/play/a04i/index.m3u8" },
+  { name: "TNT Sports Premium (Chile)", logo: "", url: "http://190.108.83.69:8000/play/a03i/index.m3u8" },
   { name: "beIN SPORTS XTRA en Español", logo: "https://i.imgur.com/V562tpO.png", url: "https://dc1644a9jazgj.cloudfront.net/beIN_Sports_Xtra_Espanol.m3u8" },
 ];
 
