@@ -899,8 +899,12 @@ function matchChannels(event, categoryId, now) {
   for (let i = 0; i < labels.length && out.length < 4; i++) {
     // "Fox Deportes · Español" and "Fox Deportes" are one card, not two
     const label = labels[i].replace(/\s*·\s*(espa[ñn]ol|portugu[eê]s|ingl[eé]s)\s*$/i, "").trim();
-    const key = plain(label);
-    if (!key || seen[key]) continue;
+    // Disney+ y Disney1 son la misma señal del mismo partido: solo las marcas que mostramos
+    // hacen tarjeta propia, y una por país
+    const brand = brandOf(label);
+    if (!brand) continue;
+    const key = brand.id + "@" + countryOfLabel(label);
+    if (seen[key]) continue;
     seen[key] = true;
     out.push({
       id: "m-" + event.slug + "-" + out.length,
@@ -914,6 +918,13 @@ function matchChannels(event, categoryId, now) {
   return out;
 }
 
+// El país que dice la etiqueta, si lo dice: "ESPN AR" -> ar, "ESPN 2" -> "".
+function countryOfLabel(label) {
+  const name = plain(label);
+  const m = /(?:^|\s)(ar|arg|argentina|mx|mex|mexico|co|col|colombia|cl|ch|chile|pe|per|peru|ec|ecu|ecuador|uy|uru|uruguay|py|par|paraguay|bo|bol|bolivia|ve|ven|venezuela|us|usa)(?:\s|$)/.exec(name);
+  if (!m) return "";
+  return m[1].slice(0, 2);
+}
 // Which source id carries that broadcaster; the rest of the match's sources stay as backups.
 function pinSource(event, label) {
   const ids = event.sources || [];
@@ -1929,20 +1940,21 @@ function playTap(item, title) {
   return { event: "play", arg: JSON.stringify({ ref: item.ref || "", id: item.id || "", title: title }) };
 }
 
+// Una tarjeta de la cuadrícula: escudo o logo arriba, nombre y una línea abajo.
 function channelRow(item, title, subtitle) {
   const children = [];
   if (item.logo) {
-    children.push({ type: "Image", url: item.logo, width: 48, height: 48, borderRadius: "small" });
+    children.push({ type: "Image", url: item.logo, width: 96, height: 96, borderRadius: "small", fit: "contain" });
   }
-  children.push({
-    type: "Column",
-    flex: 1,
-    children: [
-      { type: "Text", text: title, style: "h3", maxLines: 2 },
-      { type: "Text", text: subtitle || "", style: "caption", color: "muted", maxLines: 2 },
-    ],
-  });
-  return { type: "Row", key: String(item.id || title).slice(0, 60), gap: 12, onTap: playTap(item, title), children: children };
+  children.push({ type: "Text", text: title, style: "h4", maxLines: 2 });
+  children.push({ type: "Text", text: subtitle || "", style: "caption", color: "muted", maxLines: 1 });
+  return {
+    type: "Card",
+    key: String(item.id || title).slice(0, 60),
+    variant: "filled",
+    onTap: playTap(item, title),
+    children: [{ type: "Column", gap: 8, align: "center", children: children }],
+  };
 }
 
 export async function screen(ctx) {
@@ -1995,8 +2007,9 @@ export async function screen(ctx) {
       children.push({ type: "emptyState", title: "Sin canales", text: "No hay señales de esta marca ahora." });
     } else {
       children.push({
-        type: "ListView",
-        items: mine.map(function (channel) {
+        type: "GridView",
+        columns: 2,
+        children: mine.map(function (channel) {
           return channelRow(channel, channel.title, brand ? brand.title : "");
         }),
       });
@@ -2020,8 +2033,9 @@ export async function screen(ctx) {
   if (live.length) {
     children.push({ type: "Text", text: "En vivo ahora", style: "h3" });
     children.push({
-      type: "ListView",
-      items: live.slice(0, SCREEN_MATCHES).map(function (item) {
+      type: "GridView",
+      columns: 2,
+      children: live.slice(0, SCREEN_MATCHES).map(function (item) {
         return channelRow(item, item.title, "En vivo");
       }),
     });
@@ -2029,8 +2043,9 @@ export async function screen(ctx) {
   if (next.length) {
     children.push({ type: "Text", text: "Próximos", style: "h3" });
     children.push({
-      type: "ListView",
-      items: next.slice(0, SCREEN_MATCHES).map(function (item) {
+      type: "GridView",
+      columns: 2,
+      children: next.slice(0, SCREEN_MATCHES).map(function (item) {
         return channelRow(item, item.title, "Próximo");
       }),
     });
