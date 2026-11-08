@@ -1,7 +1,7 @@
 {
   "id": "football-plugin",
   "name": "Fútbol en vivo",
-  "version": "0.15.3",
+  "version": "0.16.0",
   "apiVersion": 15,
   "entry": "plugin.js",
   "icon": "icon.png",
@@ -20,7 +20,8 @@
     "ftlly.com",
     "*.ftlly.com",
     "futlivehd.com",
-    "*.futlivehd.com"
+    "*.futlivehd.com",
+    { "host": "avefenixtv.com", "insecureHttp": true }
   ],
   "capabilities": ["home", "resolve", "channels"],
   "liveStreamHosts": "any",
@@ -37,9 +38,28 @@
       "label": "Compositor de escudos",
       "hint": "Tu Worker de Cloudflare: muestra los dos escudos. Vacía, solo el del local.",
       "type": "url"
+    },
+    {
+      "key": "xtHost",
+      "label": "Panel IPTV: servidor",
+      "hint": "Con servidor, usuario y clave, los canales salen de tu panel.",
+      "type": "url"
+    },
+    {
+      "key": "xtUser",
+      "label": "Panel IPTV: usuario",
+      "hint": "El usuario de tu línea.",
+      "type": "text"
+    },
+    {
+      "key": "xtPass",
+      "label": "Panel IPTV: clave",
+      "hint": "La clave de tu línea; queda en este aparato.",
+      "type": "password",
+      "sync": false
     }
   ],
-  "description": "Partidos y canales en la pestaña En vivo: horarios y equipos confirmados con ESPN, escudos de los clubes, solo lo que está al aire, los próximos con su hora, y los canales deportivos (ESPN y Fox Sports separados por país: Argentina y México; DSports, TNT Sports, TyC Sports, Win Sports, DAZN, TUDN) para cuando no hay partidos, más canales latinos que la agenda no trae (Tigo Sports Paraguay y Honduras, FTV Bolivia, Deportes TVC, ITV Deportes, Teletrak, Real Madrid TV). Sin fútbol femenino.",
+  "description": "Partidos y canales en la pestaña En vivo: horarios y equipos confirmados con ESPN, escudos de los clubes, solo lo que está al aire, los próximos con su hora, y los canales deportivos por marca (ESPN, Fox Sports, DSports, Tigo Sports, TyC Sports, TNT Sports), desde tu propio panel IPTV si lo configurás. Sin fútbol femenino.",
   "author": "gregortt1",
   "homepage": "https://github.com/gregortt1/football-plugin"
 }

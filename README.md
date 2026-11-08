@@ -87,6 +87,14 @@ eso cada partido aparece **una vez por emisora** que lo transmite, con el nombre
 se abre; los demás quedan como respaldo. Se apaga en Configurar si preferís una sola tarjeta por
 partido.
 
+## Tu propio panel IPTV
+
+Si tenés una línea IPTV (Xtream Codes), cargá **servidor, usuario y clave** en Configurar y las
+seis filas de canales salen de tu panel en vez del directorio público: los mismos nombres con su
+país —`ESPN (AR)`, `ESPN 2 (PE)`, `DIRECTV SPORTS CH`— y la señal que tu línea sirve. El plugin no
+lleva credenciales adentro: cada uno pone las suyas y la clave queda en ese aparato.
+
+Sin panel, las filas siguen saliendo del directorio del sitio como siempre.
 ## Los dos escudos
 
 En la grilla de En vivo, Kino acepta una sola imagen por canal, así que por defecto el partido

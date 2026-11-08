@@ -956,18 +956,22 @@ const STREAM_BACKUP = {
 // The brands the plugin shows. Anything else the directory carries is left out on purpose:
 // a list of thirty sports channels nobody opens is worse than six that are the ones people watch.
 const BRANDS = [
-  { id: "espn", title: "ESPN", re: /^espn\b|^espn\s*\d/i },
-  { id: "fox", title: "Fox Sports", re: /^fox\s*sports|^fox\s*deportes|^fox\b/i },
-  { id: "dsports", title: "DSports", re: /^d\s*sports|^directv\s*sports|^dsports/i },
-  { id: "tigo", title: "Tigo Sports", re: /^tigo\s*sports/i },
-  { id: "tyc", title: "TyC Sports", re: /^tyc\s*sports/i },
-  { id: "tnt", title: "TNT Sports", re: /^tnt\s*sports/i },
+  { id: "espn", title: "ESPN", re: /^espn\b|^espn\s*\d/i, word: /\bespn\b/ },
+  { id: "fox", title: "Fox Sports", re: /^fox\s*sports|^fox\s*deportes|^fox\b/i, word: /\bfox\s*(sports|deportes|one)\b/ },
+  { id: "dsports", title: "DSports", re: /^d\s*sports|^directv\s*sports|^dsports/i, word: /\b(d\s*sports|directv\s*sports)\b/ },
+  { id: "tigo", title: "Tigo Sports", re: /^tigo/i, word: /\btigo\b/ },
+  { id: "tyc", title: "TyC Sports", re: /^tyc\s*sports/i, word: /\btyc\b/ },
+  { id: "tnt", title: "TNT Sports", re: /^tnt\s*sports/i, word: /\btnt\s*sports\b/ },
 ];
 
 function brandOf(title) {
   const name = plain(title);
   for (let i = 0; i < BRANDS.length; i++) {
     if (BRANDS[i].re.test(name)) return BRANDS[i];
+  }
+  // "PY // TIGO PARAGUAY" or "FCL• ESPN (HD)": the brand is in there, just not first
+  for (let i = 0; i < BRANDS.length; i++) {
+    if (BRANDS[i].word && BRANDS[i].word.test(name)) return BRANDS[i];
   }
   return null;
 }
@@ -991,6 +995,129 @@ function extraStation(extra, index) {
     stream: extra.url,
   };
 }
+// --- a private Xtream panel, when the person has one ----------------------
+
+const XT_CACHE_MS = 30 * 60 * 1000;
+let xtCache = { at: 0, categories: null, streams: Object.create(null) };
+
+function xtConfig() {
+  try {
+    const host = String(kino.config.get("xtHost") || "").trim().replace(/\/+$/, "");
+    const user = String(kino.config.get("xtUser") || "").trim();
+    const pass = String(kino.config.get("xtPass") || "");
+    if (!host || !user || !pass) return null;
+    if (!/^https?:\/\/[^\s/]+$/i.test(host)) return null;
+    return { host: host, user: user, pass: pass };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function xtApi(panel, action, categoryId) {
+  let url =
+    panel.host +
+    "/player_api.php?username=" + encodeURIComponent(panel.user) +
+    "&password=" + encodeURIComponent(panel.pass);
+  if (action) url += "&action=" + action;
+  if (categoryId) url += "&category_id=" + encodeURIComponent(categoryId);
+  const answer = await getJson(url, 6000);
+  return answer;
+}
+
+// Las categorias de deportes del panel, por nombre: cada panel las ordena a su gusto.
+function xtSportsCategories(categories) {
+  const scored = [];
+  for (let i = 0; i < categories.length; i++) {
+    const category = categories[i];
+    const name = plain(category.category_name);
+    let score = 0;
+    if (/deportes ?premium/.test(name)) score += 8;
+    if (/directv ?sports/.test(name)) score += 6;
+    // the countries whose feeds this plugin lists, where TyC, Tigo or TNT live
+    if (/paraguay|argentina|chile|mexico|peru|colombia|uruguay|bolivia|honduras|venezuela|ecuador/.test(name)) score += 5;
+    if (/sports/.test(name)) score += 4;
+    if (/espn|fox|tnt|tyc|dazn|tigo|bein/.test(name)) score += 4;
+    if (/deportes/.test(name)) score += 2;
+    if (/futbol|liga/.test(name)) score += 1;
+    if (!score) continue;
+    scored.push({ id: String(category.category_id), name: category.category_name, score: score });
+  }
+  scored.sort(function (a, b) {
+    return b.score - a.score;
+  });
+  return scored.slice(0, 14);
+}
+
+// "ESPN 1 HD | AR" -> "ESPN 1 (AR)"; "USA: ESPN 2" -> "ESPN 2"
+function xtTitle(raw) {
+  let name = clean(raw)
+    .replace(/^\s*(?:[A-Za-z]{1,3}\s*(?:\/\/|[:|]|-)\s*)+/, "")
+    .replace(/^\s*(USA|UK|LAT|LATAM|ARG|MEX|CHI|COL|PER|ECU|URU|PAR|BOL|VEN)\s*[:|\-]\s*/i, "")
+    .replace(/\s*\((?:solo\s*)?eventos?\)\s*$/i, "")
+    .replace(/\b(FHD|UHD|HD|SD|4K|8K|720p|1080p)\b/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  const tail = /(?:\||\s)\s*(AR|ARG|MX|MEX|CO|COL|CH|CHI|CL|PE|PER|EC|UY|URU|PY|PAR|BO|BOL|VE|VEN|CR|US|USA)\s*$/i.exec(name);
+  if (tail && /^\d/.test(tail[1])) return name;
+  if (tail) {
+    const code = tail[1].toUpperCase().replace("ARG", "AR").replace(/^(MEX|MX)$/, "MX").replace(/^(COL|CO)$/, "CO").replace(/^(CHI|CH|CL)$/, "CL").replace(/^(PER|PE)$/, "PE").replace(/^(URU|UY)$/, "UY").replace(/^(PAR|PY)$/, "PY").replace(/^(BOL|BO)$/, "BO").replace(/^(VEN|VE)$/, "VE").replace(/^(USA|US)$/, "US");
+    name = name.slice(0, tail.index).trim() + " (" + code + ")";
+  }
+  return name.replace(/\(\s*\)/g, " ").replace(/\s{2,}/g, " ").trim().slice(0, 80);
+}
+
+// Todos los canales de deportes del panel, una vez cada media hora.
+async function xtChannels() {
+  const panel = xtConfig();
+  if (!panel) return null;
+
+  if (xtCache.categories && Date.now() - xtCache.at < XT_CACHE_MS) return xtCache.channels;
+
+  let categories = null;
+  try {
+    categories = await xtApi(panel, "get_live_categories");
+  } catch (e) {
+    log("panel categories failed", e && e.message);
+    return xtCache.channels || [];
+  }
+  if (!Array.isArray(categories)) return xtCache.channels || [];
+
+  const sports = xtSportsCategories(categories);
+  const out = [];
+  const seen = Object.create(null);
+
+  for (let i = 0; i < sports.length; i++) {
+    let streams = null;
+    try {
+      streams = await xtApi(panel, "get_live_streams", sports[i].id);
+    } catch (e) {
+      log("panel streams failed", sports[i].id, e && e.message);
+    }
+    if (!Array.isArray(streams)) continue;
+    for (let s = 0; s < streams.length; s++) {
+      const channel = streams[s];
+      const name = xtTitle(channel.name);
+      if (!name) continue;
+      const brand = brandOf(name);
+      if (!brand) continue;
+      const key = plain(name).replace(/\ben\b/g, " ").replace(/\s+/g, " ").trim();
+      if (seen[key]) continue;
+      seen[key] = true;
+      out.push({
+        id: "xt-" + String(channel.stream_id),
+        title: name,
+        ref: "",
+        logo: channel.stream_icon || "",
+        stream: panel.host + "/live/" + encodeURIComponent(panel.user) + "/" + encodeURIComponent(panel.pass) + "/" + String(channel.stream_id) + ".m3u8",
+      });
+    }
+  }
+
+  xtCache = { at: Date.now(), categories: categories, channels: out };
+  log("panel channels", out.length);
+  return out;
+}
+
 // One list of stations: the site's own directory, with the six channels that exist in both
 // an Argentine and a Mexican feed replaced by those two, each named with its country.
 const deadStations = Object.create(null);
@@ -1088,10 +1215,17 @@ export async function liveChannels(arg) {
 
   const brand = brandById(categoryId);
   if (brand) {
-    const list = await stationList();
+    let source = null;
+    try {
+      source = await xtChannels();
+    } catch (e) {
+      log("panel unavailable", e && e.message);
+    }
+    if (!source || !source.length) source = await stationList();
+
     const mine = [];
-    for (let i = 0; i < list.length; i++) {
-      if (brandOf(list[i].title) === brand) mine.push(list[i]);
+    for (let i = 0; i < source.length; i++) {
+      if (brandOf(source[i].title) === brand) mine.push(source[i]);
     }
     const all = mine.map(function (station, index) {
       return sportsChannel(station, index, categoryId);
