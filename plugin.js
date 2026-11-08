@@ -1106,7 +1106,7 @@ async function xtChannels() {
       out.push({
         id: "xt-" + String(channel.stream_id),
         title: name,
-        ref: "",
+        ref: "x~" + String(channel.stream_id),
         logo: channel.stream_icon || "",
         stream: panel.host + "/live/" + encodeURIComponent(panel.user) + "/" + encodeURIComponent(panel.pass) + "/" + String(channel.stream_id) + ".m3u8",
       });
@@ -1358,6 +1358,7 @@ export async function resolve(ref) {
   let stream = null;
   if (key.indexOf("c~") === 0) stream = await resolveChannel(key.slice(2));
   else if (key.indexOf("f~") === 0) stream = await resolveFeed(key.slice(2));
+  else if (key.indexOf("x~") === 0) stream = resolvePanelChannel(key.slice(2));
   else if (key.indexOf("m~") === 0) stream = await resolveMatch(key.slice(2));
   else throw kino.error("not_found", "referencia desconocida");
 
@@ -1479,6 +1480,18 @@ async function channelFromServer(slug, server) {
 
 // The country feeds live on their own site: one page per channel, wrapping the relay the same
 // way every other page here does. Each entry is pinned to its country, so nothing is swapped.
+// A channel of the person's own panel: the URL is built from the settings, nothing to fetch.
+function resolvePanelChannel(streamId) {
+  const panel = xtConfig();
+  if (!panel || !/^\d+$/.test(String(streamId))) return null;
+  return {
+    url:
+      panel.host + "/live/" + encodeURIComponent(panel.user) + "/" + encodeURIComponent(panel.pass) +
+      "/" + String(streamId) + ".m3u8",
+    mime: "application/x-mpegURL",
+  };
+}
+
 async function resolveFeed(payload) {
   const parts = String(payload || "").split("~");
   const source = parts[0];
@@ -1903,4 +1916,158 @@ function functionValue(html, name) {
   const re = new RegExp("function\\s+" + escaped + "\\s*\\(\\s*\\)\\s*\\{\\s*return\\s+(\\d+)\\s*;?\\s*\\}");
   const m = re.exec(html);
   return m ? Number(m[1]) : null;
+}
+
+
+// --- the plugin's own screen ----------------------------------------------
+
+const SCREEN_BRANDS = ["espn", "fox", "dsports", "tigo", "tyc", "tnt"];
+const SCREEN_MATCHES = 12;
+const SCREEN_CHANNELS = 60;
+
+function playTap(item, title) {
+  return { event: "play", arg: JSON.stringify({ ref: item.ref || "", id: item.id || "", title: title }) };
+}
+
+function channelRow(item, title, subtitle) {
+  const children = [];
+  if (item.logo) {
+    children.push({ type: "Image", url: item.logo, width: 48, height: 48, borderRadius: "small" });
+  }
+  children.push({
+    type: "Column",
+    flex: 1,
+    children: [
+      { type: "Text", text: title, style: "h3", maxLines: 2 },
+      { type: "Text", text: subtitle || "", style: "caption", color: "muted", maxLines: 2 },
+    ],
+  });
+  return { type: "Row", key: String(item.id || title).slice(0, 60), gap: 12, onTap: playTap(item, title), children: children };
+}
+
+export async function screen(ctx) {
+  const state = (ctx && ctx.state) || {};
+  const tab = state.tab === "canales" ? "canales" : "partidos";
+  const brandId = SCREEN_BRANDS.indexOf(state.brand) === -1 ? "espn" : state.brand;
+
+  const children = [
+    {
+      type: "TabBar",
+      tabs: [{ value: "partidos", label: "Partidos" }, { value: "canales", label: "Canales" }],
+      value: tab,
+      onChanged: { event: "tab" },
+    },
+  ];
+
+  if (tab === "canales") {
+    const chips = { type: "Row", gap: 8, wrap: true, children: [] };
+    for (let i = 0; i < SCREEN_BRANDS.length; i++) {
+      const brand = brandById(SCREEN_BRANDS[i]);
+      if (!brand) continue;
+      chips.children.push({
+        type: "Button",
+        labelText: brand.title,
+        variant: brand.id === brandId ? "primary" : "text",
+        onPressed: { event: "brand", arg: brand.id },
+      });
+    }
+    children.push(chips);
+
+    let list = [];
+    try {
+      list = (await xtChannels()) || [];
+    } catch (e) {
+      list = [];
+    }
+    if (!list.length) {
+      try {
+        list = await stationList();
+      } catch (e) {
+        list = [];
+      }
+    }
+    const brand = brandById(brandId);
+    const mine = [];
+    for (let i = 0; i < list.length && mine.length < SCREEN_CHANNELS; i++) {
+      if (brandOf(list[i].title) === brand) mine.push(list[i]);
+    }
+    if (!mine.length) {
+      children.push({ type: "emptyState", title: "Sin canales", text: "No hay señales de esta marca ahora." });
+    } else {
+      children.push({
+        type: "ListView",
+        items: mine.map(function (channel) {
+          return channelRow(channel, channel.title, brand ? brand.title : "");
+        }),
+      });
+    }
+    return { type: "Column", padding: 16, gap: 12, children: children };
+  }
+
+  let live = [];
+  let next = [];
+  try {
+    live = (await liveChannels({ categoryId: "vivo", cursor: null })).items || [];
+  } catch (e) {
+    live = [];
+  }
+  try {
+    next = (await liveChannels({ categoryId: "proximos", cursor: null })).items || [];
+  } catch (e) {
+    next = [];
+  }
+
+  if (live.length) {
+    children.push({ type: "Text", text: "En vivo ahora", style: "h3" });
+    children.push({
+      type: "ListView",
+      items: live.slice(0, SCREEN_MATCHES).map(function (item) {
+        return channelRow(item, item.title, "En vivo");
+      }),
+    });
+  }
+  if (next.length) {
+    children.push({ type: "Text", text: "Próximos", style: "h3" });
+    children.push({
+      type: "ListView",
+      items: next.slice(0, SCREEN_MATCHES).map(function (item) {
+        return channelRow(item, item.title, "Próximo");
+      }),
+    });
+  }
+  if (!live.length && !next.length) {
+    children.push({ type: "emptyState", title: "Sin partidos", text: "No hay partidos en la agenda ahora." });
+  }
+  return { type: "Column", padding: 16, gap: 12, children: children };
+}
+
+export async function screenEvent({ name, arg, value, state }) {
+  if (name === "open") return { state: { tab: "partidos" } };
+  if (name === "tab") {
+    const picked = String(arg || value || "partidos");
+    return { state: Object.assign({}, state || {}, { tab: picked === "canales" ? "canales" : "partidos" }) };
+  }
+  if (name === "brand") {
+    return { state: Object.assign({}, state || {}, { brand: String(arg || "espn") }) };
+  }
+  if (name === "play") {
+    let play = null;
+    try {
+      play = JSON.parse(String(arg || "{}"));
+    } catch (e) {
+      return null;
+    }
+    if (!play || !play.ref) return { toast: "Ese canal no tiene señal ahora." };
+    return {
+      go: {
+        play: {
+          ref: String(play.ref),
+          kind: "live",
+          id: String(play.id || "live"),
+          title: String(play.title || "En vivo").slice(0, 120),
+        },
+      },
+    };
+  }
+  return null;
 }
