@@ -24,9 +24,11 @@ desinstalar.
 ## La pantalla del plugin
 
 Además de las filas de En vivo, el plugin tiene **su propia pantalla** dentro de Kino: se abre
-desde el menú ☰ y desde Ajustes. Arriba dos pestañas, **Partidos** y **Canales**; en Partidos sale
-lo que está al aire y lo que viene, en Canales una fila de botones —ESPN, Fox Sports, DSports,
-Tigo, TyC, TNT— con los canales de cada marca. Tocás uno y abre directo, sin pasar por las filas.
+desde el menú ☰ y desde Ajustes. Arriba dos pestañas, **Partidos** y **Canales**, un buscador y un
+botón **Ver ahora** que refresca. En Partidos, lo que está al aire y lo que viene en cuadrícula,
+un partido por tarjeta; en Canales, una fila de botones —ESPN, Fox Sports, DSports, Tigo, TyC,
+TNT— y los canales de la marca en lista, que con sesenta nombres se lee mejor que en cuadrícula.
+Tocás uno y abre directo, sin pasar por las filas.
 ## Qué vas a ver
 
 Todo aparece en **En vivo**, en tres filas con el nombre del plugin:

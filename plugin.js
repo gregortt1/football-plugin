@@ -875,7 +875,7 @@ function matchChannel(event, categoryId, now) {
     id: "m-" + event.slug,
     title: prefix + event.teams.slice(0, 300),
     categoryId: categoryId,
-    ref: "m~" + event.slug + "~" + event.at + "~" + event.sources.join("."),
+    ref: "m~" + event.slug + "~" + event.at + "~" + orderedSources(event).join("."),
     logo: matchLogo(event),
   };
 }
@@ -925,6 +925,21 @@ function countryOfLabel(label) {
   if (!m) return "";
   return m[1].slice(0, 2);
 }
+// Las fuentes de un partido, con la que no dice país (la señal panregional) primero.
+function orderedSources(event) {
+  const ids = event.sources || [];
+  const labels = event.labels || [];
+  if (ids.length < 2 || labels.length < 2) return ids;
+
+  const first = [];
+  const later = [];
+  for (let i = 0; i < ids.length; i++) {
+    const label = labels[i] || "";
+    if (label && countryOfLabel(label)) later.push(ids[i]);
+    else first.push(ids[i]);
+  }
+  return first.concat(later);
+}
 // Which source id carries that broadcaster; the rest of the match's sources stay as backups.
 function pinSource(event, label) {
   const ids = event.sources || [];
@@ -940,9 +955,9 @@ function pinSource(event, label) {
 
 function onePerBroadcaster() {
   try {
-    return String(kino.config.get("onePerBroadcaster") || "on") !== "off";
+    return String(kino.config.get("onePerBroadcaster") || "off") === "on";
   } catch (e) {
-    return true;
+    return false;
   }
 }
 
@@ -1940,8 +1955,25 @@ function playTap(item, title) {
   return { event: "play", arg: JSON.stringify({ ref: item.ref || "", id: item.id || "", title: title }) };
 }
 
-// Una tarjeta de la cuadrícula: escudo o logo arriba, nombre y una línea abajo.
+// Los canales van en lista: son muchos y el nombre pesa más que el logo.
 function channelRow(item, title, subtitle) {
+  const children = [];
+  if (item.logo) {
+    children.push({ type: "Image", url: item.logo, width: 48, height: 48, borderRadius: "small" });
+  }
+  children.push({
+    type: "Column",
+    flex: 1,
+    children: [
+      { type: "Text", text: title, style: "h4", maxLines: 2 },
+      { type: "Text", text: subtitle || "", style: "caption", color: "muted", maxLines: 1 },
+    ],
+  });
+  return { type: "Row", key: String(item.id || title).slice(0, 60), gap: 12, onTap: playTap(item, title), children: children };
+}
+
+// Los partidos, en cuadrícula: escudo arriba, nombre y una línea abajo.
+function channelCard(item, title, subtitle) {
   const children = [];
   if (item.logo) {
     children.push({ type: "Image", url: item.logo, width: 96, height: 96, borderRadius: "small", fit: "contain" });
@@ -1962,12 +1994,28 @@ export async function screen(ctx) {
   const tab = state.tab === "canales" ? "canales" : "partidos";
   const brandId = SCREEN_BRANDS.indexOf(state.brand) === -1 ? "espn" : state.brand;
 
+  const query = plain(state.q || "");
   const children = [
     {
       type: "TabBar",
       tabs: [{ value: "partidos", label: "Partidos" }, { value: "canales", label: "Canales" }],
       value: tab,
       onChanged: { event: "tab" },
+    },
+    {
+      type: "Row",
+      gap: 8,
+      children: [
+        {
+          type: "textInput",
+          key: "buscador",
+          hint: "Buscar equipo o canal",
+          value: String(state.q || ""),
+          flex: 1,
+          onSubmitted: { event: "q" },
+        },
+        { type: "Button", labelText: "Ver ahora", variant: "text", onPressed: { event: "refresh" } },
+      ],
     },
   ];
 
@@ -2001,15 +2049,16 @@ export async function screen(ctx) {
     const brand = brandById(brandId);
     const mine = [];
     for (let i = 0; i < list.length && mine.length < SCREEN_CHANNELS; i++) {
-      if (brandOf(list[i].title) === brand) mine.push(list[i]);
+      if (brandOf(list[i].title) !== brand) continue;
+      if (query && plain(list[i].title).indexOf(query) === -1) continue;
+      mine.push(list[i]);
     }
     if (!mine.length) {
       children.push({ type: "emptyState", title: "Sin canales", text: "No hay señales de esta marca ahora." });
     } else {
       children.push({
-        type: "GridView",
-        columns: 2,
-        children: mine.map(function (channel) {
+        type: "ListView",
+        items: mine.map(function (channel) {
           return channelRow(channel, channel.title, brand ? brand.title : "");
         }),
       });
@@ -2030,13 +2079,18 @@ export async function screen(ctx) {
     next = [];
   }
 
+  if (query) {
+    live = live.filter(function (item) { return plain(item.title).indexOf(query) !== -1; });
+    next = next.filter(function (item) { return plain(item.title).indexOf(query) !== -1; });
+  }
+
   if (live.length) {
     children.push({ type: "Text", text: "En vivo ahora", style: "h3" });
     children.push({
       type: "GridView",
       columns: 2,
       children: live.slice(0, SCREEN_MATCHES).map(function (item) {
-        return channelRow(item, item.title, "En vivo");
+        return channelCard(item, item.title, "En vivo");
       }),
     });
   }
@@ -2046,7 +2100,7 @@ export async function screen(ctx) {
       type: "GridView",
       columns: 2,
       children: next.slice(0, SCREEN_MATCHES).map(function (item) {
-        return channelRow(item, item.title, "Próximo");
+        return channelCard(item, item.title, "Próximo");
       }),
     });
   }
@@ -2064,6 +2118,16 @@ export async function screenEvent({ name, arg, value, state }) {
   }
   if (name === "brand") {
     return { state: Object.assign({}, state || {}, { brand: String(arg || "espn") }) };
+  }
+  if (name === "q") {
+    return { state: Object.assign({}, state || {}, { q: String(value || arg || "").slice(0, 40) }) };
+  }
+  if (name === "refresh") {
+    agendaCache = { at: 0, html: "" };
+    channelsCache = { at: 0, list: [] };
+    xtCache = { at: 0, categories: null, streams: Object.create(null) };
+    for (const key in espnCache) delete espnCache[key];
+    return { toast: "Actualizado" };
   }
   if (name === "play") {
     let play = null;

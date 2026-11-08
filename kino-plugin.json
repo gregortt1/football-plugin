@@ -1,7 +1,7 @@
 {
   "id": "football-plugin",
   "name": "Fútbol en vivo",
-  "version": "0.17.1",
+  "version": "0.17.2",
   "apiVersion": 15,
   "entry": "plugin.js",
   "icon": "icon.png",
@@ -34,9 +34,9 @@
     {
       "key": "onePerBroadcaster",
       "label": "Un acceso por emisora",
-      "hint": "Un acceso por canal que transmite el partido, para elegir el de tu país.",
+      "hint": "Apagado: un partido, un acceso. Encendido: uno por canal que lo transmite.",
       "type": "toggle",
-      "default": true
+      "default": false
     },
     {
       "key": "crestWorker",
