@@ -1993,9 +1993,9 @@ export async function screen(ctx) {
   const state = (ctx && ctx.state) || {};
   const tab = state.tab === "canales" ? "canales" : "partidos";
   const brandId = SCREEN_BRANDS.indexOf(state.brand) === -1 ? "espn" : state.brand;
-
   const query = plain(state.q || "");
-  const children = [
+
+  const header = [
     {
       type: "TabBar",
       tabs: [{ value: "partidos", label: "Partidos" }, { value: "canales", label: "Canales" }],
@@ -2031,7 +2031,6 @@ export async function screen(ctx) {
         onPressed: { event: "brand", arg: brand.id },
       });
     }
-    children.push(chips);
 
     let list = [];
     try {
@@ -2053,17 +2052,20 @@ export async function screen(ctx) {
       if (query && plain(list[i].title).indexOf(query) === -1) continue;
       mine.push(list[i]);
     }
+
+    const children = header.concat([chips]);
     if (!mine.length) {
       children.push({ type: "emptyState", title: "Sin canales", text: "No hay señales de esta marca ahora." });
     } else {
       children.push({
         type: "ListView",
+        flex: 1,
         items: mine.map(function (channel) {
           return channelRow(channel, channel.title, brand ? brand.title : "");
         }),
       });
     }
-    return { type: "Column", padding: 16, gap: 12, children: children };
+    return { type: "Column", layout: "fill", padding: 16, gap: 12, children: children };
   }
 
   let live = [];
@@ -2078,36 +2080,28 @@ export async function screen(ctx) {
   } catch (e) {
     next = [];
   }
-
   if (query) {
     live = live.filter(function (item) { return plain(item.title).indexOf(query) !== -1; });
     next = next.filter(function (item) { return plain(item.title).indexOf(query) !== -1; });
   }
 
-  if (live.length) {
-    children.push({ type: "Text", text: "En vivo ahora", style: "h3" });
-    children.push({
-      type: "GridView",
-      columns: 2,
-      children: live.slice(0, SCREEN_MATCHES).map(function (item) {
-        return channelCard(item, item.title, "En vivo");
-      }),
-    });
+  // una sola rejilla: lo que está al aire primero y después lo que viene, cada tarjeta con su
+  // estado en la línea de abajo
+  const cards = [];
+  for (let i = 0; i < live.length && cards.length < SCREEN_MATCHES; i++) {
+    cards.push(channelCard(live[i], live[i].title, "En vivo"));
   }
-  if (next.length) {
-    children.push({ type: "Text", text: "Próximos", style: "h3" });
-    children.push({
-      type: "GridView",
-      columns: 2,
-      children: next.slice(0, SCREEN_MATCHES).map(function (item) {
-        return channelCard(item, item.title, "Próximo");
-      }),
-    });
+  for (let i = 0; i < next.length && cards.length < SCREEN_MATCHES * 2; i++) {
+    cards.push(channelCard(next[i], next[i].title, "Próximo"));
   }
-  if (!live.length && !next.length) {
+
+  const children = header.slice();
+  if (!cards.length) {
     children.push({ type: "emptyState", title: "Sin partidos", text: "No hay partidos en la agenda ahora." });
+  } else {
+    children.push({ type: "GridView", columns: 2, flex: 1, children: cards });
   }
-  return { type: "Column", padding: 16, gap: 12, children: children };
+  return { type: "Column", layout: "fill", padding: 16, gap: 12, children: children };
 }
 
 export async function screenEvent({ name, arg, value, state }) {
