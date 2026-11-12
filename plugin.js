@@ -357,6 +357,9 @@ function utcDay(ms) {
   return "" + y + m + day;
 }
 
+// `null` means ESPN could not be asked; an empty list means it answered and has no game that
+// day. The two are not the same thing: a league with no game today still confirms nothing, and
+// the site's card for it must not slip through as if ESPN had vouched for it.
 async function espnBoard(slug, date) {
   const key = slug + "@" + date;
   const hit = espnCache[key];
@@ -366,14 +369,14 @@ async function espnBoard(slug, date) {
     const res = await kino.fetch(ESPN + slug + "/scoreboard?dates=" + date, {
       headers: { "User-Agent": UA, Accept: "application/json" },
     });
-    if (!res || !res.ok) return [];
+    if (!res || !res.ok) return null;
     const body = await res.json();
     const events = (body && body.events) || [];
     espnCache[key] = { at: Date.now(), events: events };
     return events;
   } catch (e) {
     log("espn failed", slug, date, e && e.message);
-    return [];
+    return null;
   }
 }
 
@@ -493,8 +496,10 @@ async function confirmFixtures(events, now) {
       const boards = [];
       for (let d = 0; d < list.length; d++) {
         const board = await espnBoard(group.slugs[s], list[d]);
-        if (board.length) answered = true;
-        for (let b = 0; b < board.length; b++) boards.push(board[b]);
+        // a board that came back — even empty — is an answer: ESPN knows this league and has
+        // nothing on that day, which is exactly what "not confirmed" is supposed to mean
+        if (board) answered = true;
+        for (let b = 0; board && b < board.length; b++) boards.push(board[b]);
       }
       if (!boards.length) continue;
       for (let i = 0; i < group.events.length; i++) {
@@ -531,6 +536,8 @@ async function confirmFixtures(events, now) {
       at: confirmed.fixture.at,
       sources: event.sources,
       labels: event.labels || [],
+      // which source id carries which broadcaster: the broadcaster cards pin a feed through it
+      sourceIds: event.sourceIds || null,
       crest: confirmed.fixture.homeLogo,
       crestAway: confirmed.fixture.awayLogo,
       espnId: confirmed.fixture.id,
@@ -552,6 +559,9 @@ function parseAgenda(html, now) {
 
     const sources = [];
     const labels = [];
+    // which source id carries each broadcaster: labels are deduped, ids are not, so the position
+    // of a label says nothing about the position of its source
+    const sourceIds = Object.create(null);
     const srcRe = /href="\/match\/([^"#?]+)#source=(\d+)">\s*<span>[^<]*<\/span>\s*<small>([^<]*)<\/small>/g;
     let m;
     while ((m = srcRe.exec(chunk))) {
@@ -559,7 +569,9 @@ function parseAgenda(html, now) {
       if (sources.indexOf(m[2]) !== -1) continue;
       sources.push(m[2]);
       const label = clean(m[3]);
-      if (label && labels.indexOf(label) === -1) labels.push(label);
+      if (!label) continue;
+      if (!sourceIds[label]) sourceIds[label] = m[2];
+      if (labels.indexOf(label) === -1) labels.push(label);
     }
     if (!sources.length) continue;
 
@@ -586,6 +598,7 @@ function parseAgenda(html, now) {
     const sides = splitTeams(teams);
     const event = makeEvent(slug, competition, teams, sides, at, sources);
     event.labels = labels;
+    event.sourceIds = sourceIds;
     events.push(event);
   }
 
@@ -677,7 +690,10 @@ function siteUrl(value) {
   if (!url) return "";
   if (/^https?:\/\//i.test(url)) return url;
   if (url.indexOf("//") === 0) return "https:" + url;
-  return SITE + (url.charAt(0) === "/" ? url : "/" + url);
+  // relative paths follow the mirror that last answered, so a logo does not point at a site
+  // that is down
+  const base = SITES[siteIndex] || SITE;
+  return base + (url.charAt(0) === "/" ? url : "/" + url);
 }
 
 // --- cached fetches -------------------------------------------------------
@@ -827,6 +843,7 @@ export async function home() {
 export async function liveCategories() {
   const out = [
     { id: "vivo", title: t("Partidos en vivo", "Live matches"), genre: "deportes" },
+    { id: "canales", title: t("Canales deportivos", "Sports channels"), genre: "deportes" },
     { id: "proximos", title: t("Próximos partidos", "Upcoming matches"), genre: "deportes" },
   ];
   for (let i = 0; i < BRANDS.length; i++) {
@@ -928,13 +945,20 @@ function countryOfLabel(label) {
 // Las fuentes de un partido, con la que no dice país (la señal panregional) primero.
 function orderedSources(event) {
   const ids = event.sources || [];
+  if (ids.length < 2) return ids;
   const labels = event.labels || [];
-  if (ids.length < 2 || labels.length < 2) return ids;
+  const map = event.sourceIds || {};
 
   const first = [];
   const later = [];
   for (let i = 0; i < ids.length; i++) {
-    const label = labels[i] || "";
+    let label = "";
+    for (let l = 0; l < labels.length; l++) {
+      if (map[labels[l]] === ids[i]) {
+        label = labels[l];
+        break;
+      }
+    }
     if (label && countryOfLabel(label)) later.push(ids[i]);
     else first.push(ids[i]);
   }
@@ -944,18 +968,19 @@ function orderedSources(event) {
 function pinSource(event, label) {
   const ids = event.sources || [];
   if (!ids.length) return "";
-  const index = (event.labels || []).indexOf(label);
-  if (index <= 0) return ids.join(".");
-  const first = event.sourceIds && event.sourceIds[label];
-  const pinned = first || ids[Math.min(index, ids.length - 1)];
+  const map = event.sourceIds || {};
+  const pinned = map[label] || ids[0];
   const rest = [];
   for (let i = 0; i < ids.length; i++) if (ids[i] !== pinned) rest.push(ids[i]);
   return [pinned].concat(rest).join(".");
 }
 
+// A `toggle` setting reaches a plugin as a boolean, not as "on"/"off": comparing it against the
+// string left this switch dead, so every match always came out as a single card.
 function onePerBroadcaster() {
   try {
-    return String(kino.config.get("onePerBroadcaster") || "off") === "on";
+    const value = kino.config.get("onePerBroadcaster");
+    return value === true || value === "on" || value === "true";
   } catch (e) {
     return false;
   }
@@ -1016,7 +1041,9 @@ function extraStation(extra, index) {
   return {
     id: "x-" + index,
     title: extra.name,
-    ref: "",
+    // the signal is already known, so it plays from `stream`; the ref is what the plugin's own
+    // screen sends, and resolving it hands the same URL back
+    ref: "s~" + index,
     logo: extra.logo,
     stream: extra.url,
   };
@@ -1024,7 +1051,7 @@ function extraStation(extra, index) {
 // --- a private Xtream panel, when the person has one ----------------------
 
 const XT_CACHE_MS = 30 * 60 * 1000;
-let xtCache = { at: 0, categories: null, streams: Object.create(null) };
+let xtCache = { at: 0, categories: null, channels: null };
 
 function xtConfig() {
   try {
@@ -1221,8 +1248,9 @@ function sportsChannel(station, index, categoryId) {
     logo: station.logo || DEFAULT_LOGO,
     number: (index % 9999) + 1,
   };
+  // with both, the stream plays and the ref is the fallback when that stream stops answering
   if (station.stream) item.stream = { url: station.stream, mime: "application/x-mpegURL" };
-  else item.ref = station.ref;
+  if (station.ref) item.ref = station.ref;
   return item;
 }
 
@@ -1233,6 +1261,28 @@ function pageOf(list, cursor, size) {
   return { items: items, next: next };
 }
 
+// The stations of one brand, or of every brand at once when the category is the whole
+// directory: the panel first, the public directory when there is no panel.
+async function brandStations(categoryId) {
+  let source = null;
+  try {
+    source = await xtChannels();
+  } catch (e) {
+    log("panel unavailable", e && e.message);
+  }
+  if (!source || !source.length) source = await stationList();
+
+  const brand = categoryId === "canales" ? null : brandById(categoryId);
+  const out = [];
+  for (let i = 0; i < source.length; i++) {
+    const station = source[i];
+    const hit = brandOf(station.title);
+    if (brand ? hit !== brand : !hit) continue;
+    out.push(sportsChannel(station, out.length, categoryId));
+  }
+  return out;
+}
+
 export async function liveChannels(arg) {
   await null;
   const categoryId = String((arg && arg.categoryId) || "vivo");
@@ -1240,23 +1290,8 @@ export async function liveChannels(arg) {
   if (!isFinite(cursor) || cursor < 0) throw kino.error("not_found", "cursor inválido");
 
   const brand = brandById(categoryId);
-  if (brand) {
-    let source = null;
-    try {
-      source = await xtChannels();
-    } catch (e) {
-      log("panel unavailable", e && e.message);
-    }
-    if (!source || !source.length) source = await stationList();
-
-    const mine = [];
-    for (let i = 0; i < source.length; i++) {
-      if (brandOf(source[i].title) === brand) mine.push(source[i]);
-    }
-    const all = mine.map(function (station, index) {
-      return sportsChannel(station, index, categoryId);
-    });
-    return pageOf(all, cursor, CHANNEL_PAGE);
+  if (brand || categoryId === "canales") {
+    return pageOf(await brandStations(categoryId), cursor, CHANNEL_PAGE);
   }
 
   // the site being unreachable must not turn into an error screen: the channels still work
@@ -1352,7 +1387,9 @@ export async function guide(arg) {
   for (let i = 0; i < ids.length && i < 50; i++) {
     const id = String(ids[i] || "");
     if (id.indexOf("m-") !== 0) continue;
-    const event = bySlug[id.slice(2)];
+    // a card of one broadcaster is "m-<slug>-<n>": the match behind it is still that slug
+    let event = bySlug[id.slice(2)];
+    if (!event) event = bySlug[id.slice(2).replace(/-\d+$/, "")];
     if (!event) continue;
     const start = event.at;
     const end = event.at + MATCH_WINDOW_MS;
@@ -1380,11 +1417,17 @@ export async function resolve(ref) {
   const cached = resolveCache[key];
   if (cached && Date.now() - cached.at < STREAM_CACHE_MS) return cached.stream;
 
+  // the map only ever grows otherwise: a device left on for days keeps every ref it ever played
+  for (const old in resolveCache) {
+    if (Date.now() - resolveCache[old].at >= STREAM_CACHE_MS) delete resolveCache[old];
+  }
+
   startBudget();
   let stream = null;
   if (key.indexOf("c~") === 0) stream = await resolveChannel(key.slice(2));
   else if (key.indexOf("f~") === 0) stream = await resolveFeed(key.slice(2));
   else if (key.indexOf("x~") === 0) stream = resolvePanelChannel(key.slice(2));
+  else if (key.indexOf("s~") === 0) stream = resolveKnown(key.slice(2));
   else if (key.indexOf("m~") === 0) stream = await resolveMatch(key.slice(2));
   else throw kino.error("not_found", "referencia desconocida");
 
@@ -1407,6 +1450,12 @@ export async function resolve(ref) {
 async function resolveChannel(slug) {
   const servers = (await channelServers(slug)).slice(0, MAX_SERVERS);
 
+  // The site's mirrors get a few seconds and no more: a relay that hangs must not eat the
+  // whole budget when a known stream of the same channel is one line away. The cap has to be in
+  // place before the requests start, or they take the whole budget and the cap never bites.
+  const full = resolveDeadline;
+  resolveDeadline = Math.min(full || Date.now() + RESOLVE_BUDGET_MS, Date.now() + 4500);
+
   // the mirrors of one channel are asked at the same time, same as a match's sources
   const tries = servers.map(function (server) {
     return channelFromServer(slug, server)
@@ -1421,11 +1470,7 @@ async function resolveChannel(slug) {
       });
   });
 
-  // The site's mirrors get a few seconds and no more: a relay that hangs must not eat the
-  // whole budget when a known stream of the same channel is one line away.
-  const full = resolveDeadline;
-  resolveDeadline = Math.min(full, Date.now() + 4500);
-
+  // the first mirror that answers wins; the others are left to time out on their own
   const winner = await new Promise(function (resolve) {
     if (!tries.length) return resolve(null);
     let open = tries.length;
@@ -1516,6 +1561,13 @@ function resolvePanelChannel(streamId) {
       "/" + String(streamId) + ".m3u8",
     mime: "application/x-mpegURL",
   };
+}
+
+// A station that already comes with its signal (the iptv-org list): nothing to ask the site for.
+function resolveKnown(index) {
+  const entry = EXTRA_STREAMS[Number(index)];
+  if (!entry || !entry.url) return null;
+  return { url: entry.url, mime: "application/x-mpegURL" };
 }
 
 async function resolveFeed(payload) {
@@ -1663,27 +1715,25 @@ async function streamFromBroadcast(sources) {
 }
 
 // Each source button says which channel carries it: "Fuente 2 · ESPN AR". The name is what
-// lets a dead match fall back to that channel.
+// lets a dead match fall back to that channel. The buttons without a title are sources too, so
+// both passes run: the names are collected first, then every button in page order.
 function parseSources(html) {
   const page = String(html || "");
+  const names = Object.create(null);
+  const named = /data-source="(\d+)"[^>]*title="([^"]*)"/g;
+  let m;
+  while ((m = named.exec(page))) {
+    const label = clean(m[2]).split("·").pop().trim();
+    if (label && !names[m[1]]) names[m[1]] = label;
+  }
+
   const out = [];
   const seen = Object.create(null);
-  const button = /data-source="(\d+)"[^>]*title="([^"]*)"/g;
-  let m;
-  while ((m = button.exec(page))) {
-    const id = m[1];
-    if (seen[id]) continue;
-    seen[id] = true;
-    const label = clean(m[2]).split("·").pop().trim();
-    out.push({ id: id, name: label });
-  }
-  if (out.length) return out.slice(0, 8);
-
-  const plain = /data-source="(\d+)"/g;
-  while ((m = plain.exec(page))) {
+  const bare = /data-source="(\d+)"/g;
+  while ((m = bare.exec(page))) {
     if (seen[m[1]]) continue;
     seen[m[1]] = true;
-    out.push({ id: m[1], name: "" });
+    out.push({ id: m[1], name: names[m[1]] || "" });
   }
   return out.slice(0, 8);
 }
@@ -1772,7 +1822,7 @@ async function alive(url, deep, cap) {
     const manifest = await fetchCap(url, cap);
     if (!manifest) return false;
 
-    let text = manifest.text;
+    let text = String(manifest.text || "").replace(/^[\uFEFF\s]+/, "");
     let base = url;
     if (text.indexOf("#EXTM3U") !== 0) return false;
 
@@ -2068,17 +2118,24 @@ export async function screen(ctx) {
     return { type: "Column", layout: "fill", padding: 16, gap: 12, children: children };
   }
 
+  // One walk of the agenda for both lists: two calls to liveChannels would confirm every
+  // fixture twice for the same cards.
   let live = [];
   let next = [];
   try {
-    live = (await liveChannels({ categoryId: "vivo", cursor: null })).items || [];
+    const events = await agendaEvents();
+    const now = Date.now();
+    for (let i = 0; i < events.length; i++) {
+      const event = events[i];
+      const on = isLive(event, now);
+      if (!on && event.at <= now + EARLY_MS) continue; // finished and no longer listed
+      const cards = matchChannels(event, on ? "vivo" : "proximos", now);
+      const list = on ? live : next;
+      for (let c = 0; c < cards.length; c++) list.push(cards[c]);
+      if (live.length + next.length > 200) break; // a full agenda is not a screen
+    }
   } catch (e) {
-    live = [];
-  }
-  try {
-    next = (await liveChannels({ categoryId: "proximos", cursor: null })).items || [];
-  } catch (e) {
-    next = [];
+    log("screen agenda failed", e && e.message);
   }
   if (query) {
     live = live.filter(function (item) { return plain(item.title).indexOf(query) !== -1; });
@@ -2119,8 +2176,10 @@ export async function screenEvent({ name, arg, value, state }) {
   if (name === "refresh") {
     agendaCache = { at: 0, html: "" };
     channelsCache = { at: 0, list: [] };
-    xtCache = { at: 0, categories: null, streams: Object.create(null) };
+    xtCache = { at: 0, categories: null, channels: null };
     for (const key in espnCache) delete espnCache[key];
+    for (const key in resolveCache) delete resolveCache[key];
+    for (const key in deadStations) delete deadStations[key];
     return { toast: "Actualizado" };
   }
   if (name === "play") {

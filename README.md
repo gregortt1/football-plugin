@@ -29,9 +29,11 @@ botón **Ver ahora** que refresca. En Partidos, lo que está al aire y lo que vi
 un partido por tarjeta; en Canales, una fila de botones —ESPN, Fox Sports, DSports, Tigo, TyC,
 TNT— y los canales de la marca en lista, que con sesenta nombres se lee mejor que en cuadrícula.
 Tocás uno y abre directo, sin pasar por las filas.
+
 ## Qué vas a ver
 
-Todo aparece en **En vivo**, en tres filas con el nombre del plugin:
+Todo aparece en **En vivo**, en filas con el nombre del plugin: los partidos, el directorio y una
+fila por marca.
 
 **Partidos en vivo** — solo lo que está jugando ahora (o arranca en los próximos 10 minutos).
 Un partido que empieza a las nueve de la noche no aparece acá a las tres de la tarde.
@@ -65,19 +67,20 @@ encuentra equipos y canales por nombre, y la guía de TV muestra a qué hora emp
 
 ## Los canales, por marca
 
-*Canales deportivos* ya no es una lista larga: cada marca tiene su fila en En vivo —**ESPN, Fox
-Sports, DSports, Tigo Sports, TyC Sports y TNT Sports**—, con sus señales de
-cada país dentro. El
-resto del directorio no se muestra: seis filas con lo que la gente mira rinden más que treinta
-canales que nadie abre.
+*Canales deportivos* es el directorio completo, pero solo de las seis marcas que la gente mira
+—**ESPN, Fox Sports, DSports, Tigo Sports, TyC Sports y TNT Sports**—; el resto del directorio no
+se muestra, porque treinta canales que nadie abre no rinden más que seis.
+
+Cada una de esas marcas tiene además **su propia fila** en En vivo, con sus señales de cada país
+dentro: ahí se elige el ESPN de tu país sin pasar por los demás.
 
 ## Canales que la agenda no trae
 
 Además del directorio del sitio, el plugin suma canales deportivos latinos que salen de las
-listas públicas de [iptv-org](https://iptv-org.github.io/iptv/): Tigo Sports de Paraguay y de
-Honduras, FTV de Bolivia, Deportes TVC, CDN Deportes, ITV Deportes, Teletrak, Turf Móvil, AS3
-Sport TV, FIFA+, Real Madrid TV, TNT Sports Premium y beIN SPORTS XTRA en español. Esos vienen con su señal ya
-conocida, así que Kino los abre sin pasar por el sitio.
+listas públicas de [iptv-org](https://iptv-org.github.io/iptv/): Tigo Sports de Paraguay, Tigo
+Sports de Honduras, Tigo Sports+ de Paraguay y TNT Sports Premium de Chile. Esos vienen con su
+señal ya conocida, así que Kino los abre sin pasar por el sitio. La lista vive en `EXTRA_STREAMS`,
+dentro de `plugin.js`: agregar uno es agregar una línea.
 
 Son señales de terceros: algunas están geobloqueadas fuera de su país y otras se caen sin aviso.
 Antes de agregar una se comprobó que estuviera emitiendo, pero eso no lo garantiza para mañana.
@@ -86,14 +89,16 @@ Además, para trece canales del directorio que suelen quedarse sin fuente —ESP
 Fox Sports, TyC Sports, TNT Sports, DSports, Movistar Deportes, Sky Sports LaLiga, TUDN— el
 plugin guarda una señal de respaldo ya comprobada: si la del sitio no responde, el mismo canal
 se abre por ahí. En el peor caso se ve el mismo canal, no una pantalla negra.
+
 ## Un acceso por emisora
 
 El mismo partido no se ve igual en todo el continente: un ESPN 2 de Argentina no es el ESPN 2 de
-México, y una misma fecha de Champions puede ir por ESPN, ESPN 3 o Fox Sports según el país. Por
-eso cada partido aparece **una vez por emisora** que lo transmite, con el nombre del canal:
-`Galatasaray vs Stuttgart · ESPN 5`, `Shakhtar vs Sporting CP · ESPN`. Elegís el de tu país y ese
-se abre; los demás quedan como respaldo. Se apaga en Configurar si preferís una sola tarjeta por
-partido.
+México, y una misma fecha de Champions puede ir por ESPN, ESPN 3 o Fox Sports según el país. Con
+**Un acceso por emisora** encendido en Configurar, cada partido aparece **una vez por emisora**
+que lo transmite, con el nombre del canal: `Galatasaray vs Stuttgart · ESPN 5`,
+`Shakhtar vs Sporting CP · ESPN`. Elegís el de tu país y ese se abre; los demás quedan como
+respaldo. Apagado —como viene—, un partido es una sola tarjeta y la señal que abre es la
+panregional, con las de cada país detrás.
 
 ## Tu propio panel IPTV
 
@@ -145,7 +150,7 @@ NFL, MLB, MotoGP, boxeo, golf), aunque la agenda del sitio los incluya.
 
 - **No veo la pestaña En vivo con el plugin**: revisá que la instalación haya terminado y que el
   consentimiento de canales en vivo esté aceptado.
-- **Los canales tardan en cambiar**: Kino guarda la lista de canales una hora. Si acaba de
+- **Los canales tardan en cambiar**: el plugin guarda la lista de canales cinco minutos. Si acaba de
   empezar un partido y todavía no aparece, esperá o reiniciá la app.
 - **Kino pide una versión más nueva**: el plugin usa la versión de plugins más reciente de Kino.
 
