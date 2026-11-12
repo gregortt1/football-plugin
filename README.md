@@ -71,6 +71,12 @@ ESPN marca aplazado, suspendido, abandonado o cancelado **no se muestra nunca**,
 todavía lo tenga en la agenda y aunque la competición sea de las que siempre se ven: en ese caso
 ESPN no calla, da un veredicto, y el veredicto manda. Lo mismo si ESPN ya lo da por terminado.
 
+Solo fútbol. La agenda del sitio mezcla tenis, padel, básquet y una fila comodín llamada
+*Sports* entre los partidos, y el tenis no dice en ningún lado que sea tenis: la fila se llama
+`Bybit Stockholm Open - Men's Singles` y los que juegan son personas, no clubes. Una competición
+que no está en la tabla de arriba solo se muestra si su nombre suena a fútbol —liga, copa, torneo,
+división, nations, eliminatoria—; el resto queda afuera antes de pedir nada.
+
 Cada partido lleva el escudo del club local y cada canal lleva su logo. La búsqueda de En vivo
 encuentra equipos y canales por nombre, y la guía de TV muestra a qué hora empieza cada partido.
 

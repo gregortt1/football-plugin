@@ -126,20 +126,30 @@ function plain(value) {
 
 // --- which events this plugin shows --------------------------------------
 
-// Anything that is not football: the agenda also carries padel, tennis, motor racing, US sports.
-// Matched against `plain()` text, so no accents here.
+// Anything that is not football: the agenda also carries tennis, padel, motor racing, US sports.
+// Matched against `plain()` text, so no accents here. The tennis rows are the hard ones because
+// the sport is never named: "Bybit Stockholm Open - Men's Singles" only says "singles".
 const NOT_FOOTBALL =
-  /\b(sports|padel|tenis|tennis|atp|wta|f1|formula|motogp|moto gp|nba|nfl|nhl|mlb|ufc|fiba|boxeo|boxing|rugby|cricket|golf|volei|beisbol|ciclismo|atletismo|knockout|lfa)\b/;
+  /\b(sports|padel|tenis|tennis|atp|wta|challenger|grand slam|roland garros|wimbledon|us open|australian open|davis cup|singles|doubles|nba|nfl|nhl|mlb|ncaa|euroliga|acb|fiba|baloncesto|basketball|ufc|mma|boxeo|boxing|rugby|cricket|golf|volei|volleyball|beisbol|baseball|ciclismo|atletismo|motogp|moto gp|formula|f1|snooker|darts|dardos|poker|esports|e sports|surf|skate|knockout|lfa)\b/;
 
 // Women's football is out on request: competitions, team lines and tags.
 const WOMEN =
   /femen|women|\bwsl\b|\bnwsl\b|damer|feminin|frauen|femminile|shebelieves/;
 
+// A competition the table does not map is only shown when its name reads like football. Without
+// this the tennis card walked straight in: the agenda files it under its own tournament name and
+// the players are people, not clubs, so nothing about the row says "not football".
+const FOOTBALL_NAME =
+  /liga|copa|primera|segunda|serie|division|torneo|champions|league|cup|libertadores|sudamericana|recopa|supercopa|nations|eliminatoria|clasificator|amistoso|futbol|soccer|conmebol|concacaf|uefa|mundial|finalissima|apertura|clausura/;
+
 function isFootball(competition, teams) {
-  const text = plain(competition) + " " + plain(teams);
+  const name = plain(competition);
+  const text = name + " " + plain(teams);
   if (NOT_FOOTBALL.test(text)) return false;
   if (WOMEN.test(text)) return false;
-  return true;
+  // a competition the table knows is football by definition
+  if (espnLeagues(competition) !== undefined) return true;
+  return FOOTBALL_NAME.test(name);
 }
 
 // The person's own list of competitions to leave out (Configurar). A fragment is enough:
