@@ -46,9 +46,9 @@ hora, acá hay algo.
 abres antes de la hora, Kino te dice a qué hora empieza en vez de abrir una señal muerta.
 
 Los horarios, los equipos y la competición salen de la agenda pública de **ESPN**, no de la
-página que emite la señal: un partido aparece solo si ESPN lo tiene, con la hora que ESPN le
-da y con los nombres de los dos clubes tal como los nombra ESPN. Las copas juveniles y de
-reserva quedan afuera, y también las entradas duplicadas o con un rival que no corresponde.
+página que emite la señal: cuando ESPN tiene el partido, manda su hora y los nombres de los dos
+clubes tal como los nombra ESPN. Las copas juveniles y de reserva quedan afuera, y también las
+entradas duplicadas o con un rival que no corresponde.
 
 Las cinco grandes de Europa —Premier League, LaLiga, Serie A, Bundesliga y Ligue 1— con sus
 copas (FA Cup, Carabao, Copa del Rey, Coppa Italia, DFB Pokal, Coupe de France), la Champions,
@@ -57,13 +57,26 @@ MX, la Liga Profesional, el Brasileirão y las ligas de Colombia, Chile, Perú, 
 Ecuador, Venezuela y Bolivia.
 
 Solo primera división: Championship, LaLiga 2, Serie B, 2. Bundesliga, Ligue 2, Série B y la
-Liga de Expansión MX quedan afuera, igual que las ligas juveniles y de reserva. Las copas que ESPN no publica —Copa Argentina, Copa do Brasil,
-Copa Colombia, Copa Chile— siguen apareciendo con los datos del sitio, porque no hay contra qué
-cotejarlas. Un partido que ESPN marca aplazado, suspendido o cancelado no se muestra, aunque el
+Liga de Expansión MX quedan afuera, igual que las ligas juveniles y de reserva. Las
+competiciones que ESPN no publica —Copa Argentina, Copa do Brasil, Copa Colombia, Copa Chile,
+Supercopa Argentina, la Copa de la División Profesional de Bolivia— siguen apareciendo con los
+datos del sitio, porque no hay contra qué cotejarlas. Lo mismo pasa con la Nations League: el
+sitio nombra a los equipos en español (`Turquía`, `Chipre`) y ESPN en inglés (`Türkiye`,
+`Cyprus`), así que no hay forma de confirmar el partido y se muestra tal como lo publica el
+sitio. Un partido que ESPN marca aplazado, suspendido o cancelado no se muestra, aunque el
 sitio todavía lo tenga en la agenda.
 
 Cada partido lleva el escudo del club local y cada canal lleva su logo. La búsqueda de En vivo
 encuentra equipos y canales por nombre, y la guía de TV muestra a qué hora empieza cada partido.
+
+## Ligas que no quiero
+
+No todas las competiciones que el sitio publica interesan a todo el mundo. En **Configurar ▸
+Ligas que no quiero** se agrega una por fila y el plugin las deja fuera de las dos filas de
+partidos antes de pedir nada a ESPN. Vale un trozo del nombre y no importan las tildes:
+`Reserva` saca todo torneo de reserva, `Expansión` la segunda mexicana, `Amistoso` los partidos
+de selecciones que no son torneo. Con la lista vacía —como viene— se muestra todo lo que el
+plugin considera fútbol de primera división.
 
 ## Los canales, por marca
 

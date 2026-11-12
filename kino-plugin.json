@@ -1,7 +1,7 @@
 {
   "id": "football-plugin",
   "name": "Fútbol en vivo",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "apiVersion": 15,
   "entry": "plugin.js",
   "icon": "icon.png",
@@ -37,6 +37,14 @@
       "hint": "Apagado: un partido, un acceso. Encendido: uno por canal que lo transmite.",
       "type": "toggle",
       "default": false
+    },
+    {
+      "key": "hideLeagues",
+      "label": "Ligas que no quiero",
+      "hint": "Una competición por fila. Vale un trozo del nombre: «Reserva», «Expansión».",
+      "type": "list",
+      "fields": [{ "key": "name", "label": "Competición", "type": "text" }],
+      "max": 40
     },
     {
       "key": "crestWorker",

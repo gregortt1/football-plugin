@@ -142,6 +142,31 @@ function isFootball(competition, teams) {
   return true;
 }
 
+// The person's own list of competitions to leave out (Configurar). A fragment is enough:
+// "Reserva" takes every reserve tournament, "Expansion" the Mexican second division.
+function hiddenLeagues() {
+  try {
+    const rows = kino.config.get("hideLeagues");
+    if (!Array.isArray(rows)) return [];
+    const out = [];
+    for (let i = 0; i < rows.length; i++) {
+      const name = plain(rows[i] && rows[i].name);
+      if (name && out.indexOf(name) === -1) out.push(name);
+    }
+    return out;
+  } catch (e) {
+    return [];
+  }
+}
+
+function isHidden(competition, hidden) {
+  const name = plain(competition);
+  for (let i = 0; i < hidden.length; i++) {
+    if (name.indexOf(hidden[i]) !== -1) return true;
+  }
+  return false;
+}
+
 // --- team names -----------------------------------------------------------
 
 const CLUB_WORDS = {
@@ -306,6 +331,14 @@ const ESPN_LEAGUES = [
   [/libertadores/i, ["conmebol.libertadores"], "Copa Libertadores"],
   [/sudamericana/i, ["conmebol.sudamericana"], "Copa Sudamericana"],
   [/recopa/i, ["conmebol.recopa"], "Recopa Sudamericana"],
+  [/^supercopa argentina/i, ["arg.supercopa"], "Supercopa Argentina"],
+  [/^copa de la divisi[oó]n profesional/i, ["bol.copa"], "Copa de la División Profesional"],
+  // Nations League is deliberately absent: the site names the teams in Spanish ("Turquía",
+  // "Chipre") and ESPN in English, so nothing would ever confirm and the whole competition would
+  // vanish. Unmapped, the site's own card stands — the same call the Argentine and Brazilian
+  // cups already get.
+  [/^torneo de reserva|^reserva/i, null, ""],
+  [/^amistoso/i, ["fifa.friendly"], "Amistoso"],
   // Argentina, Brasil, México
   [/^liga profesional( argentina)?$/i, ["arg.1"], "Liga Profesional"],
   [/^brasileir[aã]o/i, ["bra.1"], "Brasileirão"],
@@ -314,7 +347,7 @@ const ESPN_LEAGUES = [
   [/^liga de expansi[oó]n mx/i, null, ""],
   [/^copa mx/i, ["mex.copa_mx"], "Copa MX"],
   // Colombia, Chile, Perú, Paraguay, Uruguay, Ecuador, Venezuela, Bolivia
-  [/^liga betplay/i, ["col.1"], "Liga BetPlay"],
+  [/^liga betplay|^liga colombia/i, ["col.1"], "Liga BetPlay"],
   [/^primera a$/i, ["col.1"], "Primera A"],
   [/^liga chile$/i, ["chi.1"], "Liga Chile"],
   [/^liga 1$/i, ["per.1"], "Liga 1"],
@@ -338,6 +371,9 @@ const ESPN_LEAGUES = [
 
 const espnCache = Object.create(null);
 
+// `null` is a competition this plugin never shows; `undefined` is one ESPN does not cover, whose
+// card stands with the site's own word. Collapsing both into `null` — as this did — silently
+// threw away every competition missing from the table above, Nations League included.
 function espnLeagues(competition) {
   const name = clean(competition).replace(/:\s*$/, "");
   for (let i = 0; i < ESPN_LEAGUES.length; i++) {
@@ -346,7 +382,7 @@ function espnLeagues(competition) {
     if (!rule[1]) return null; // a competition this plugin does not show at all
     return { slugs: rule[1], title: rule[2] };
   }
-  return null;
+  return undefined;
 }
 
 function utcDay(ms) {
@@ -551,6 +587,7 @@ async function confirmFixtures(events, now) {
 function parseAgenda(html, now) {
   const events = [];
   const chunks = String(html || "").split("data-agenda-event");
+  const hidden = hiddenLeagues();
 
   for (let i = 1; i < chunks.length; i++) {
     const chunk = chunks[i];
@@ -586,6 +623,7 @@ function parseAgenda(html, now) {
     }
 
     if (!isFootball(competition, teams)) continue;
+    if (hidden.length && isHidden(competition, hidden)) continue;
 
     const start = (/data-source-instant="([^"]+)"/.exec(chunk) || [])[1] || "";
     const at = start ? new Date(start).getTime() : 0;
@@ -2131,7 +2169,10 @@ export async function screen(ctx) {
       if (!on && event.at <= now + EARLY_MS) continue; // finished and no longer listed
       const cards = matchChannels(event, on ? "vivo" : "proximos", now);
       const list = on ? live : next;
-      for (let c = 0; c < cards.length; c++) list.push(cards[c]);
+      for (let c = 0; c < cards.length; c++) {
+        cards[c].comp = event.competition; // local only: the screen prints it under the title
+        list.push(cards[c]);
+      }
       if (live.length + next.length > 200) break; // a full agenda is not a screen
     }
   } catch (e) {
@@ -2146,10 +2187,10 @@ export async function screen(ctx) {
   // estado en la línea de abajo
   const cards = [];
   for (let i = 0; i < live.length && cards.length < SCREEN_MATCHES; i++) {
-    cards.push(channelCard(live[i], live[i].title, "En vivo"));
+    cards.push(channelCard(live[i], live[i].title, live[i].comp ? "En vivo · " + live[i].comp : "En vivo"));
   }
   for (let i = 0; i < next.length && cards.length < SCREEN_MATCHES * 2; i++) {
-    cards.push(channelCard(next[i], next[i].title, "Próximo"));
+    cards.push(channelCard(next[i], next[i].title, next[i].comp ? "Próximo · " + next[i].comp : "Próximo"));
   }
 
   const children = header.slice();
