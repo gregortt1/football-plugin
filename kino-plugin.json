@@ -1,7 +1,7 @@
 {
   "id": "football-plugin",
   "name": "Fútbol en vivo",
-  "version": "0.18.2",
+  "version": "0.18.3",
   "apiVersion": 15,
   "entry": "plugin.js",
   "icon": "icon.png",
@@ -23,12 +23,7 @@
     "*.futlivehd.com",
     { "host": "avefenixtv.com", "insecureHttp": true }
   ],
-  "capabilities": ["home", "resolve", "channels", "screen"],
-  "screen": {
-    "label": "Fútbol en vivo",
-    "icon": "tv",
-    "opensFrom": ["menu", "settings"]
-  },
+  "capabilities": ["home", "resolve", "channels"],
   "liveStreamHosts": "any",
   "settings": [
     {

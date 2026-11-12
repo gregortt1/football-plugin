@@ -494,13 +494,15 @@ function playable(fixture) {
 }
 
 // The ESPN fixture for a site event: same two clubs, kick-off close enough to be the same match.
-function espnFixtureFor(siteEvent, boardEvents) {
+// `includeDead` also accepts a fixture ESPN marked postponed, cancelled or abandoned, so the
+// caller can tell "ESPN does not list it" from "ESPN says it is not played".
+function espnFixtureFor(siteEvent, boardEvents, includeDead) {
   let best = null;
   let bestDelta = Infinity;
   for (let i = 0; i < boardEvents.length; i++) {
     const fixture = espnNames(boardEvents[i]);
     if (!fixture.home || !fixture.away || !fixture.at) continue;
-    if (!playable(fixture)) continue;
+    if (!includeDead && !playable(fixture)) continue;
     const delta = Math.abs(fixture.at - siteEvent.at);
     if (delta > 3 * 60 * 60 * 1000) continue;
     const straight = sameSide(siteEvent.home, fixture.home) && sameSide(siteEvent.away, fixture.away);
@@ -528,6 +530,7 @@ async function confirmFixtures(events, now) {
   }
 
   const confirmedFor = Object.create(null); // site event -> fixture
+  const blocked = Object.create(null); // site event ESPN says is postponed, cancelled or abandoned
   const offline = Object.create(null); // leagues ESPN could not answer for
 
   // every board this refresh needs, fetched in small parallel batches: six at a time is
@@ -578,11 +581,16 @@ async function confirmFixtures(events, now) {
       for (let i = 0; i < group.events.length; i++) {
         const event = group.events[i];
         const key = "e" + event.at + event.teams;
-        if (confirmedFor[key]) continue;
-        const fixture = espnFixtureFor(event, boards);
-        if (!fixture) continue;
-        confirmedFor[key] = { event: event, fixture: fixture, title: group.title };
-        left--;
+        if (confirmedFor[key] || blocked[key]) continue;
+        const fixture = espnFixtureFor(event, boards, false);
+        if (fixture) {
+          confirmedFor[key] = { event: event, fixture: fixture, title: group.title };
+          left--;
+          continue;
+        }
+        // the same two clubs, the same night, and ESPN says postponed or cancelled: that is a
+        // verdict on the match, and it stands even for the competitions always shown
+        if (espnFixtureFor(event, boards, true)) blocked[key] = true;
       }
     }
     // ESPN unreachable for this league: keep the site's cards rather than empty the row
@@ -595,6 +603,9 @@ async function confirmFixtures(events, now) {
     const league = espnLeagues(event.competition);
     if (league === null) continue; // youth and reserve cups
     const confirmed = confirmedFor["e" + event.at + event.teams];
+    // ESPN says this match is not played — postponed, cancelled, abandoned — or it is already
+    // over. No card, not even for the competitions always shown.
+    if (blocked["e" + event.at + event.teams]) continue;
     if (!confirmed) {
       // ESPN has this league and not this match — unless the competition is one of the ones the
       // person asked to always see, where the site's card is better than an empty row
@@ -1118,8 +1129,8 @@ function extraStation(extra, index) {
   return {
     id: "x-" + index,
     title: extra.name,
-    // the signal is already known, so it plays from `stream`; the ref is what the plugin's own
-    // screen sends, and resolving it hands the same URL back
+    // the signal is already known, so it plays from `stream`; the ref is what a channel entry
+    // sends when Kino asks for one, and resolving it hands the same URL back
     ref: "s~" + index,
     logo: extra.logo,
     stream: extra.url,
@@ -2069,217 +2080,4 @@ function functionValue(html, name) {
   const re = new RegExp("function\\s+" + escaped + "\\s*\\(\\s*\\)\\s*\\{\\s*return\\s+(\\d+)\\s*;?\\s*\\}");
   const m = re.exec(html);
   return m ? Number(m[1]) : null;
-}
-
-
-// --- the plugin's own screen ----------------------------------------------
-
-const SCREEN_BRANDS = ["espn", "fox", "dsports", "tigo", "tyc", "tnt"];
-const SCREEN_MATCHES = 12;
-const SCREEN_CHANNELS = 60;
-
-function playTap(item, title) {
-  return { event: "play", arg: JSON.stringify({ ref: item.ref || "", id: item.id || "", title: title }) };
-}
-
-// Los canales van en lista: son muchos y el nombre pesa más que el logo.
-function channelRow(item, title, subtitle) {
-  const children = [];
-  if (item.logo) {
-    children.push({ type: "Image", url: item.logo, width: 48, height: 48, borderRadius: "small" });
-  }
-  children.push({
-    type: "Column",
-    flex: 1,
-    children: [
-      { type: "Text", text: title, style: "h4", maxLines: 2 },
-      { type: "Text", text: subtitle || "", style: "caption", color: "muted", maxLines: 1 },
-    ],
-  });
-  return { type: "Row", key: String(item.id || title).slice(0, 60), gap: 12, onTap: playTap(item, title), children: children };
-}
-
-// Los partidos, en cuadrícula: escudo arriba, nombre y una línea abajo.
-function channelCard(item, title, subtitle) {
-  const children = [];
-  if (item.logo) {
-    children.push({ type: "Image", url: item.logo, width: 96, height: 96, borderRadius: "small", fit: "contain" });
-  }
-  children.push({ type: "Text", text: title, style: "h4", maxLines: 2 });
-  children.push({ type: "Text", text: subtitle || "", style: "caption", color: "muted", maxLines: 1 });
-  return {
-    type: "Card",
-    key: String(item.id || title).slice(0, 60),
-    variant: "filled",
-    onTap: playTap(item, title),
-    children: [{ type: "Column", gap: 8, align: "center", children: children }],
-  };
-}
-
-export async function screen(ctx) {
-  const state = (ctx && ctx.state) || {};
-  const tab = state.tab === "canales" ? "canales" : "partidos";
-  const brandId = SCREEN_BRANDS.indexOf(state.brand) === -1 ? "espn" : state.brand;
-  const query = plain(state.q || "");
-
-  const header = [
-    {
-      type: "TabBar",
-      tabs: [{ value: "partidos", label: "Partidos" }, { value: "canales", label: "Canales" }],
-      value: tab,
-      onChanged: { event: "tab" },
-    },
-    {
-      type: "Row",
-      gap: 8,
-      children: [
-        {
-          type: "textInput",
-          key: "buscador",
-          hint: "Buscar equipo o canal",
-          value: String(state.q || ""),
-          flex: 1,
-          onSubmitted: { event: "q" },
-        },
-        { type: "Button", labelText: "Ver ahora", variant: "text", onPressed: { event: "refresh" } },
-      ],
-    },
-  ];
-
-  if (tab === "canales") {
-    const chips = { type: "Row", gap: 8, wrap: true, children: [] };
-    for (let i = 0; i < SCREEN_BRANDS.length; i++) {
-      const brand = brandById(SCREEN_BRANDS[i]);
-      if (!brand) continue;
-      chips.children.push({
-        type: "Button",
-        labelText: brand.title,
-        variant: brand.id === brandId ? "primary" : "text",
-        onPressed: { event: "brand", arg: brand.id },
-      });
-    }
-
-    let list = [];
-    try {
-      list = (await xtChannels()) || [];
-    } catch (e) {
-      list = [];
-    }
-    if (!list.length) {
-      try {
-        list = await stationList();
-      } catch (e) {
-        list = [];
-      }
-    }
-    const brand = brandById(brandId);
-    const mine = [];
-    for (let i = 0; i < list.length && mine.length < SCREEN_CHANNELS; i++) {
-      if (brandOf(list[i].title) !== brand) continue;
-      if (query && plain(list[i].title).indexOf(query) === -1) continue;
-      mine.push(list[i]);
-    }
-
-    const children = header.concat([chips]);
-    if (!mine.length) {
-      children.push({ type: "emptyState", title: "Sin canales", text: "No hay señales de esta marca ahora." });
-    } else {
-      children.push({
-        type: "ListView",
-        flex: 1,
-        items: mine.map(function (channel) {
-          return channelRow(channel, channel.title, brand ? brand.title : "");
-        }),
-      });
-    }
-    return { type: "Column", layout: "fill", padding: 16, gap: 12, children: children };
-  }
-
-  // One walk of the agenda for both lists: two calls to liveChannels would confirm every
-  // fixture twice for the same cards.
-  let live = [];
-  let next = [];
-  try {
-    const events = await agendaEvents();
-    const now = Date.now();
-    for (let i = 0; i < events.length; i++) {
-      const event = events[i];
-      const on = isLive(event, now);
-      if (!on && event.at <= now + EARLY_MS) continue; // finished and no longer listed
-      const cards = matchChannels(event, on ? "vivo" : "proximos", now);
-      const list = on ? live : next;
-      for (let c = 0; c < cards.length; c++) {
-        cards[c].comp = event.competition; // local only: the screen prints it under the title
-        list.push(cards[c]);
-      }
-      if (live.length + next.length > 200) break; // a full agenda is not a screen
-    }
-  } catch (e) {
-    log("screen agenda failed", e && e.message);
-  }
-  if (query) {
-    live = live.filter(function (item) { return plain(item.title).indexOf(query) !== -1; });
-    next = next.filter(function (item) { return plain(item.title).indexOf(query) !== -1; });
-  }
-
-  // una sola rejilla: lo que está al aire primero y después lo que viene, cada tarjeta con su
-  // estado en la línea de abajo
-  const cards = [];
-  for (let i = 0; i < live.length && cards.length < SCREEN_MATCHES; i++) {
-    cards.push(channelCard(live[i], live[i].title, live[i].comp ? "En vivo · " + live[i].comp : "En vivo"));
-  }
-  for (let i = 0; i < next.length && cards.length < SCREEN_MATCHES * 2; i++) {
-    cards.push(channelCard(next[i], next[i].title, next[i].comp ? "Próximo · " + next[i].comp : "Próximo"));
-  }
-
-  const children = header.slice();
-  if (!cards.length) {
-    children.push({ type: "emptyState", title: "Sin partidos", text: "No hay partidos en la agenda ahora." });
-  } else {
-    children.push({ type: "GridView", columns: 2, flex: 1, children: cards });
-  }
-  return { type: "Column", layout: "fill", padding: 16, gap: 12, children: children };
-}
-
-export async function screenEvent({ name, arg, value, state }) {
-  if (name === "open") return { state: { tab: "partidos" } };
-  if (name === "tab") {
-    const picked = String(arg || value || "partidos");
-    return { state: Object.assign({}, state || {}, { tab: picked === "canales" ? "canales" : "partidos" }) };
-  }
-  if (name === "brand") {
-    return { state: Object.assign({}, state || {}, { brand: String(arg || "espn") }) };
-  }
-  if (name === "q") {
-    return { state: Object.assign({}, state || {}, { q: String(value || arg || "").slice(0, 40) }) };
-  }
-  if (name === "refresh") {
-    agendaCache = { at: 0, html: "" };
-    channelsCache = { at: 0, list: [] };
-    xtCache = { at: 0, categories: null, channels: null };
-    for (const key in espnCache) delete espnCache[key];
-    for (const key in resolveCache) delete resolveCache[key];
-    for (const key in deadStations) delete deadStations[key];
-    return { toast: "Actualizado" };
-  }
-  if (name === "play") {
-    let play = null;
-    try {
-      play = JSON.parse(String(arg || "{}"));
-    } catch (e) {
-      return null;
-    }
-    if (!play || !play.ref) return { toast: "Ese canal no tiene señal ahora." };
-    return {
-      go: {
-        play: {
-          ref: String(play.ref),
-          kind: "live",
-          id: String(play.id || "live"),
-          title: String(play.title || "En vivo").slice(0, 120),
-        },
-      },
-    };
-  }
-  return null;
 }

@@ -21,14 +21,10 @@ El plugin no está en la tienda de Kino: solo se instala escribiendo esa direcci
 actualizarlo, entra en **Plugins ▸ Instalados** y busca la actualización; no hace falta
 desinstalar.
 
-## La pantalla del plugin
+## Dónde aparece
 
-Además de las filas de En vivo, el plugin tiene **su propia pantalla** dentro de Kino: se abre
-desde el menú ☰ y desde Ajustes. Arriba dos pestañas, **Partidos** y **Canales**, un buscador y un
-botón **Ver ahora** que refresca. En Partidos, lo que está al aire y lo que viene en cuadrícula,
-un partido por tarjeta; en Canales, una fila de botones —ESPN, Fox Sports, DSports, Tigo, TyC,
-TNT— y los canales de la marca en lista, que con sesenta nombres se lee mejor que en cuadrícula.
-Tocás uno y abre directo, sin pasar por las filas.
+Solo en **En vivo**. El plugin no tiene pantalla propia ni catálogo: aporta sus filas a la
+pestaña En vivo de Kino y nada más. Si querés ver otra cosa, es en Kino, no acá.
 
 ## Qué vas a ver
 
@@ -71,11 +67,21 @@ Argentina, la Copa de la División Profesional de Bolivia— siguen apareciendo 
 sitio, porque no hay contra qué cotejarlas. Lo mismo pasa con la Nations League: el sitio nombra
 a los equipos en español (`Turquía`, `Chipre`) y ESPN en inglés (`Türkiye`, `Cyprus`), así que
 no hay forma de confirmar el partido y se muestra tal como lo publica el sitio. Un partido que
-ESPN marca aplazado, suspendido o cancelado no se muestra, aunque el sitio todavía lo tenga en la
-agenda.
+ESPN marca aplazado, suspendido, abandonado o cancelado **no se muestra nunca**, aunque el sitio
+todavía lo tenga en la agenda y aunque la competición sea de las que siempre se ven: en ese caso
+ESPN no calla, da un veredicto, y el veredicto manda. Lo mismo si ESPN ya lo da por terminado.
 
 Cada partido lleva el escudo del club local y cada canal lleva su logo. La búsqueda de En vivo
 encuentra equipos y canales por nombre, y la guía de TV muestra a qué hora empieza cada partido.
+
+## Por qué ESPN y no Sofascore
+
+Sofascore y BeSoccer tienen los datos, pero no los entregan: sus endpoints responden **403** a
+cualquier petición que no venga de su propia web —probado desde acá, con navegador de escritorio
+y de teléfono—, y Kino no puede pasar por su muro. La API pública de ESPN no pide clave y
+devuelve el estado de cada partido (`postponed`, `canceled`, `inprogress`, `post`), que es justo
+lo que hace falta para no mostrar algo que no se juega. El sitio de la señal pone la agenda y los
+enlaces; ESPN pone la hora, los equipos y el estado.
 
 ## Ligas que no quiero
 
