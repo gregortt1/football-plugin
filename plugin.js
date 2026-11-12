@@ -328,6 +328,15 @@ const ESPN_LEAGUES = [
   [/^(uefa )?europa league|^liga europa/i, ["uefa.europa"], "Europa League"],
   [/conference league|uefa conference/i, ["uefa.europa.conf"], "Conference League"],
   // Sudamérica
+  // World Cup qualifiers, before the Sudamericana rule: "Eliminatorias Sudamericanas" would
+  // otherwise read as the Copa Sudamericana. The youth and Olympic ones are out.
+  [/preol[ií]mpic|ol[ií]mpic qualif|clasificaci[oó]n ol[ií]mpic/i, null, ""],
+  [/eliminatoria.*(sub|juvenil|u-?\d)/i, null, ""],
+  [
+    /eliminatoria|clasificator/i,
+    ["fifa.worldq.conmebol", "fifa.worldq.uefa", "fifa.worldq.concacaf", "fifa.worldq.afc", "fifa.worldq.caf", "fifa.worldq.ofc"],
+    "Eliminatorias",
+  ],
   [/libertadores/i, ["conmebol.libertadores"], "Copa Libertadores"],
   [/sudamericana/i, ["conmebol.sudamericana"], "Copa Sudamericana"],
   [/recopa/i, ["conmebol.recopa"], "Recopa Sudamericana"],
@@ -338,7 +347,8 @@ const ESPN_LEAGUES = [
   // vanish. Unmapped, the site's own card stands — the same call the Argentine and Brazilian
   // cups already get.
   [/^torneo de reserva|^reserva/i, null, ""],
-  [/^amistoso/i, ["fifa.friendly"], "Amistoso"],
+  // friendlies of national teams: not worth a row
+  [/^amistoso/i, null, ""],
   // Argentina, Brasil, México
   [/^liga profesional( argentina)?$/i, ["arg.1"], "Liga Profesional"],
   [/^brasileir[aã]o/i, ["bra.1"], "Brasileirão"],
@@ -348,10 +358,13 @@ const ESPN_LEAGUES = [
   [/^copa mx/i, ["mex.copa_mx"], "Copa MX"],
   // Colombia, Chile, Perú, Paraguay, Uruguay, Ecuador, Venezuela, Bolivia
   [/^liga betplay|^liga colombia/i, ["col.1"], "Liga BetPlay"],
-  [/^primera a$/i, ["col.1"], "Primera A"],
+  // "Primera A" on this site is the Colombian top division, not the B: the B is "Primera B",
+  // and that one is already out.
+  [/^primera a$/i, ["col.1"], "Liga BetPlay"],
   [/^liga chile$/i, ["chi.1"], "Liga Chile"],
   [/^liga 1$/i, ["per.1"], "Liga 1"],
   [/^liga paraguay$/i, ["par.1"], "Liga Paraguay"],
+  // Copa Paraguay has no ESPN slug: unmapped, so the site's card stands on its own word
   [/^liga auf|^primera divisi[oó]n uruguaya/i, ["uru.1"], "Liga AUF"],
   [/^liga pro|^liga ecuador/i, ["ecu.1"], "LigaPro"],
   [/^liga venezolana|^liga futve/i, ["ven.1"], "Liga FUTVE"],
@@ -370,6 +383,30 @@ const ESPN_LEAGUES = [
 ];
 
 const espnCache = Object.create(null);
+
+// Competitions the person asked to always see: the South American and Mexican leagues and cups,
+// Paraguay's among them. ESPN confirms them when it can — its kick-off time, its crests — and
+// when it cannot (a board that files the game under another date, a club named in Spanish) the
+// site's own card stands instead of the match vanishing. Without this, "ESPN has no word on it"
+// and "ESPN does not have it" were the same sentence, and a whole league could disappear on a
+// name mismatch.
+const ALWAYS_SHOW = [
+  /brasileir/i,
+  /^liga mx$|^liga bbva/i,
+  /libertadores/i,
+  /sudamericana/i,
+  /paraguay|paraguaya/i,
+  /^liga betplay|^liga colombia|^primera a$/i,
+  /eliminatoria|clasificator/i,
+];
+
+function alwaysShown(competition) {
+  const name = clean(competition).replace(/:\s*$/, "");
+  for (let i = 0; i < ALWAYS_SHOW.length; i++) {
+    if (ALWAYS_SHOW[i].test(name)) return true;
+  }
+  return false;
+}
 
 // `null` is a competition this plugin never shows; `undefined` is one ESPN does not cover, whose
 // card stands with the site's own word. Collapsing both into `null` — as this did — silently
@@ -559,7 +596,9 @@ async function confirmFixtures(events, now) {
     if (league === null) continue; // youth and reserve cups
     const confirmed = confirmedFor["e" + event.at + event.teams];
     if (!confirmed) {
-      if (league && !offline[league.title]) continue; // ESPN has this league and not this match
+      // ESPN has this league and not this match — unless the competition is one of the ones the
+      // person asked to always see, where the site's card is better than an empty row
+      if (league && !offline[league.title] && !alwaysShown(event.competition)) continue;
       out.push(event); // ESPN has no word on it: the site's card stands
       continue;
     }

@@ -56,15 +56,23 @@ la Europa y la Conference, y del otro lado la Libertadores, la Sudamericana, la 
 MX, la Liga Profesional, el Brasileirão y las ligas de Colombia, Chile, Perú, Paraguay, Uruguay,
 Ecuador, Venezuela y Bolivia.
 
+Las ligas y copas sudamericanas y la de México **no se caen**: si ESPN no tiene el partido en su
+tablero del día —porque lo archiva con otra fecha o porque nombra al club distinto—, la tarjeta
+sigue con los datos del sitio en vez de desaparecer. Es la misma regla para la Liga MX, el
+Brasileirão, la Libertadores, la Sudamericana, la liga y la copa de Paraguay, la liga de Colombia
+y las eliminatorias mundialistas.
+
 Solo primera división: Championship, LaLiga 2, Serie B, 2. Bundesliga, Ligue 2, Série B y la
-Liga de Expansión MX quedan afuera, igual que las ligas juveniles y de reserva. Las
-competiciones que ESPN no publica —Copa Argentina, Copa do Brasil, Copa Colombia, Copa Chile,
-Supercopa Argentina, la Copa de la División Profesional de Bolivia— siguen apareciendo con los
-datos del sitio, porque no hay contra qué cotejarlas. Lo mismo pasa con la Nations League: el
-sitio nombra a los equipos en español (`Turquía`, `Chipre`) y ESPN en inglés (`Türkiye`,
-`Cyprus`), así que no hay forma de confirmar el partido y se muestra tal como lo publica el
-sitio. Un partido que ESPN marca aplazado, suspendido o cancelado no se muestra, aunque el
-sitio todavía lo tenga en la agenda.
+Liga de Expansión MX quedan afuera, igual que las ligas juveniles y de reserva, los amistosos de
+selecciones y las eliminatorias juveniles y olímpicas. En este sitio *Primera A* es la primera
+colombiana, no la B —la B es *Primera B*, y esa sí queda afuera—. Las competiciones que ESPN no
+publica —Copa Argentina, Copa do Brasil, Copa Colombia, Copa Chile, Copa Paraguay, Supercopa
+Argentina, la Copa de la División Profesional de Bolivia— siguen apareciendo con los datos del
+sitio, porque no hay contra qué cotejarlas. Lo mismo pasa con la Nations League: el sitio nombra
+a los equipos en español (`Turquía`, `Chipre`) y ESPN en inglés (`Türkiye`, `Cyprus`), así que
+no hay forma de confirmar el partido y se muestra tal como lo publica el sitio. Un partido que
+ESPN marca aplazado, suspendido o cancelado no se muestra, aunque el sitio todavía lo tenga en la
+agenda.
 
 Cada partido lleva el escudo del club local y cada canal lleva su logo. La búsqueda de En vivo
 encuentra equipos y canales por nombre, y la guía de TV muestra a qué hora empieza cada partido.
